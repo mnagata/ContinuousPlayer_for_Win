@@ -64,3 +64,15 @@ Backup_*
 # Python bytecode and cache files
 __pycache__/
 *.py[cod]
+
+# .NET / WinUI
+**/bin/
+**/obj/
+.vs/
+*.user
+*.pfx
+AppPackages/
+TestResults/
+ui-test-artifacts/
+.tools/
+test-results.json
