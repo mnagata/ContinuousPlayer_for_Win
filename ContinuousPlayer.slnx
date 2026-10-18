@@ -1,0 +1,9 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+    <Platform Name="ARM64" />
+  </Configurations>
+  <Project Path="ContinuousPlayer/ContinuousPlayer.csproj" />
+  <Folder Name="/src/"><Project Path="src/ContinuousPlayer.Core/ContinuousPlayer.Core.csproj" /></Folder>
+  <Folder Name="/tests/"><Project Path="tests/ContinuousPlayer.Core.Tests/ContinuousPlayer.Core.Tests.csproj" /></Folder>
+</Solution>

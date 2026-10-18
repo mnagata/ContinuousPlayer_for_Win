@@ -1,0 +1,93 @@
+<Page x:Class="ContinuousPlayer.MainPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:vm="using:ContinuousPlayer.ViewModels"
+    xmlns:local="using:ContinuousPlayer"
+    RequestedTheme="Dark" Loaded="Page_Loaded" SizeChanged="Page_SizeChanged">
+    <Grid x:Name="Root" KeyDown="Root_KeyDown" Background="{ThemeResource CanvasBrush}">
+        <ScrollViewer x:Name="Home" Background="{ThemeResource HomeBrush}" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+            <Grid MinHeight="480">
+                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Padding="28,32" MaxWidth="560">
+                    <Viewbox Width="180" Height="180" HorizontalAlignment="Center" AutomationProperties.AccessibilityView="Raw">
+                        <Canvas Width="108" Height="108">
+                            <Path Data="M46,43 L46,29 Q46,26 49,27 L76,32 Q79,32.5 79,36 L79,55" Stroke="{ThemeResource LogoBackBrush}" StrokeThickness="5" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
+                            <Path Data="M33,68 L33,39 Q33,36 36,37 L65,42 Q68,42.5 68,46 L68,66" Stroke="{ThemeResource LogoFrontBrush}" StrokeThickness="5" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
+                            <Path Data="M46,47 Q44,46 44,49 L44,62 Q44,65 46,64 L57,57 Q59,55.5 57,54z" Fill="{ThemeResource MainTextBrush}"/>
+                            <Path Data="M30,60 C24,77 44,87 74,64 L68,60 L82,60 L78,74 L76,68 C49,90 20,79 30,60z" Fill="{ThemeResource PrimaryBrush}"/>
+                        </Canvas>
+                    </Viewbox>
+                    <TextBlock Text="ANIME OPENINGS / ENDINGS" Foreground="{ThemeResource AccentTextBrush}" FontSize="12" CharacterSpacing="180" HorizontalAlignment="Center"/>
+                    <Viewbox MaxWidth="420" Height="44" Margin="0,8,0,0" StretchDirection="DownOnly">
+                        <TextBlock Text="ContinuousPlayer" FontSize="32" FontWeight="SemiBold" Foreground="{ThemeResource MainTextBrush}"/>
+                    </Viewbox>
+                    <Button x:Name="ChooseButton" Content="OP / EDを選ぶ" Width="280" Height="56" Margin="0,28,0,0" HorizontalAlignment="Center" Background="{ThemeResource PrimaryBrush}" Foreground="{ThemeResource PrimaryTextBrush}" CornerRadius="28" FontSize="17" Click="Choose_Click" AutomationProperties.AutomationId="ChooseFolder"/>
+                    <Button Content="Exit" Width="280" Height="48" Margin="0,12,0,0" HorizontalAlignment="Center" CornerRadius="24" Click="Exit_Click" AutomationProperties.AutomationId="ExitHome"/>
+                    <TextBlock Text="← → 前 / 次　↑ ↓ 10秒シーク&#x0a;Space / Enter 再生・一時停止　F11 全画面" TextAlignment="Center" Foreground="{ThemeResource MutedTextBrush}" FontSize="14" Margin="0,20,0,0" TextWrapping="Wrap"/>
+                </StackPanel>
+            </Grid>
+        </ScrollViewer>
+        <Grid x:Name="Playback" Visibility="Collapsed" Background="{ThemeResource CanvasBrush}">
+            <MediaPlayerElement x:Name="Player" AreTransportControlsEnabled="False" AutoPlay="False" Stretch="Uniform" IsTabStop="False" IsHitTestVisible="False" AutomationProperties.AutomationId="VideoPlayer" AutomationProperties.Name="メディア映像"/>
+            <local:CursorSurface x:Name="TouchSurface" Background="Transparent" IsTabStop="True" UseSystemFocusVisuals="False" PointerPressed="Surface_Pressed" PointerReleased="Surface_Released" PointerCanceled="Surface_Canceled" PointerCaptureLost="Surface_Canceled" AutomationProperties.AutomationId="TouchSurface" AutomationProperties.Name="再生操作。左右でファイル移動、上下で10秒シーク、Spaceで再生切り替え">
+                <local:CursorSurface.Template><ControlTemplate TargetType="local:CursorSurface"><Grid Background="{TemplateBinding Background}"/></ControlTemplate></local:CursorSurface.Template>
+            </local:CursorSurface>
+            <StackPanel x:Name="AudioTitle" VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="640" Margin="32" IsHitTestVisible="False" Visibility="Collapsed" Spacing="20">
+                <FontIcon Glyph="&#xE8D6;" FontSize="64" Foreground="{ThemeResource AccentTextBrush}"/>
+                <TextBlock Text="{x:Bind Vm.FileName, Mode=OneWay}" FontSize="24" TextWrapping="Wrap" TextAlignment="Center" Foreground="{ThemeResource MainTextBrush}"/>
+            </StackPanel>
+            <Grid x:Name="PauseToolbar" VerticalAlignment="Top" Height="56" Background="{ThemeResource ToolbarBrush}" Visibility="Collapsed" ColumnSpacing="4" Padding="4">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="48"/><ColumnDefinition Width="*"/><ColumnDefinition Width="48"/><ColumnDefinition Width="48"/><ColumnDefinition Width="48"/><ColumnDefinition Width="48"/></Grid.ColumnDefinitions>
+                <Button Click="Home_Click" Style="{StaticResource PlayerButtonStyle}" AutomationProperties.AutomationId="PlayerHome" AutomationProperties.Name="ホーム" ToolTipService.ToolTip="ホーム (H)"><FontIcon Glyph="&#xE80F;"/></Button>
+                <TextBlock Grid.Column="1" Text="{x:Bind Vm.FileName, Mode=OneWay}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Foreground="{ThemeResource MainTextBrush}" Margin="8,0"/>
+                <Button x:Name="ResumeButton" Grid.Column="2" Click="Resume_Click" Style="{StaticResource PlayerButtonStyle}" AutomationProperties.AutomationId="Resume" AutomationProperties.Name="再生再開" ToolTipService.ToolTip="再生再開"><FontIcon Glyph="&#xE768;"/></Button>
+                <Button Grid.Column="3" Click="Info_Click" Style="{StaticResource PlayerButtonStyle}" AutomationProperties.AutomationId="PlaybackInfo" AutomationProperties.Name="情報" ToolTipService.ToolTip="情報 (I)"><FontIcon Glyph="&#xE946;"/></Button>
+                <Button Grid.Column="4" Click="PlaybackFolder_Click" Style="{StaticResource PlayerButtonStyle}" AutomationProperties.AutomationId="PlaybackFolder" AutomationProperties.Name="再生元フォルダー" ToolTipService.ToolTip="再生元フォルダー (O)"><FontIcon Glyph="&#xED25;"/></Button>
+                <Button Grid.Column="5" Click="Exit_Click" Style="{StaticResource PlayerButtonStyle}" AutomationProperties.AutomationId="ExitPlayer" AutomationProperties.Name="終了" ToolTipService.ToolTip="終了"><FontIcon Glyph="&#xE8BB;"/></Button>
+            </Grid>
+            <TextBlock x:Name="PortraitInfo" Text="{x:Bind Vm.MediaInfo, Mode=OneWay}" VerticalAlignment="Bottom" Margin="24,0,24,100" TextAlignment="Center" TextWrapping="Wrap" Foreground="{ThemeResource MutedTextBrush}" IsHitTestVisible="False"/>
+            <TextBlock Text="{x:Bind Vm.PlaybackStatus, Mode=OneWay}" AutomationProperties.AutomationId="PlaybackStatus" AutomationProperties.LiveSetting="Polite" VerticalAlignment="Bottom" HorizontalAlignment="Center" Margin="24" TextWrapping="Wrap" Foreground="{ThemeResource MainTextBrush}"/>
+        </Grid>
+        <Grid x:Name="BrowserOverlay" Visibility="Collapsed" Background="{ThemeResource ScrimBrush}" Padding="24" KeyDown="Browser_KeyDown">
+            <Border x:Name="BrowserCard" MaxWidth="880" MaxHeight="800" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" CornerRadius="20" Background="{ThemeResource BrowserBrush}" BorderBrush="{ThemeResource BrowserStrokeBrush}" BorderThickness="1" Padding="20">
+                <Grid RowSpacing="16">
+                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                    <Grid ColumnSpacing="8">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="48"/><ColumnDefinition Width="96"/><ColumnDefinition Width="*"/><ColumnDefinition Width="48"/></Grid.ColumnDefinitions>
+                        <Button x:Name="BackButton" Width="48" Height="48" CornerRadius="24" Click="Back_Click" AutomationProperties.AutomationId="BrowserBack" AutomationProperties.Name="上の階層へ" ToolTipService.ToolTip="戻る (Alt+←)"><FontIcon Glyph="&#xE72B;"/></Button>
+                        <Button Grid.Column="1" Content="キャンセル" Height="48" CornerRadius="24" Click="Cancel_Click" AutomationProperties.AutomationId="BrowserCancel"/>
+                        <TextBlock Grid.Column="2" Text="{x:Bind Vm.BrowserTitle, Mode=OneWay}" FontSize="18" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" AutomationProperties.AutomationId="BrowserTitle" ToolTipService.ToolTip="{x:Bind Vm.BrowserTitle, Mode=OneWay}"/>
+                        <Button x:Name="RefreshButton" Grid.Column="3" Width="48" Height="48" CornerRadius="24" Click="Refresh_Click" AutomationProperties.AutomationId="BrowserRefresh" AutomationProperties.Name="再読み込み" ToolTipService.ToolTip="再読み込み (F5)"><FontIcon Glyph="&#xE72C;"/></Button>
+                    </Grid>
+                    <Grid Grid.Row="1">
+                        <ListView x:Name="BrowserList" ItemsSource="{x:Bind Vm.Rows, Mode=OneTime}" IsItemClickEnabled="True" ItemClick="Browser_ItemClick" SelectionMode="Single" HorizontalContentAlignment="Stretch" AutomationProperties.AutomationId="BrowserList" AutomationProperties.Name="フォルダーとメディア" RightTapped="Browser_RightTapped" Holding="Browser_Holding">
+                            <ListView.ItemContainerStyle><Style TargetType="ListViewItem"><Setter Property="MinHeight" Value="52"/><Setter Property="Margin" Value="0,1"/><Setter Property="Padding" Value="12,4"/><Setter Property="HorizontalContentAlignment" Value="Stretch"/><Setter Property="FocusVisualPrimaryBrush" Value="{ThemeResource AccentTextBrush}"/><Setter Property="FocusVisualPrimaryThickness" Value="3"/></Style></ListView.ItemContainerStyle>
+                            <ListView.ItemTemplate>
+                                <DataTemplate x:DataType="vm:BrowserRow">
+                                    <Grid ColumnSpacing="16" AutomationProperties.Name="{x:Bind AccessibleName, Mode=OneTime}">
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="36"/><ColumnDefinition Width="*"/><ColumnDefinition Width="24"/></Grid.ColumnDefinitions>
+                                        <FontIcon Glyph="{x:Bind Glyph, Mode=OneTime}" Foreground="{ThemeResource AccentTextBrush}" FontSize="24"/>
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                            <TextBlock Text="{x:Bind Name, Mode=OneTime}" FontSize="20" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis"/>
+                                            <TextBlock Text="{x:Bind Detail, Mode=OneTime}" FontSize="12" Foreground="{ThemeResource MutedTextBrush}" TextTrimming="CharacterEllipsis"/>
+                                        </StackPanel>
+                                        <FontIcon Grid.Column="2" Glyph="{x:Bind Chevron, Mode=OneTime}" FontSize="16"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                        </ListView>
+                        <TextBlock Text="{x:Bind Vm.EmptyMessage, Mode=OneWay}" TextAlignment="Center" TextWrapping="Wrap" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="24" Foreground="{ThemeResource MutedTextBrush}" IsHitTestVisible="False"/>
+                        <ProgressRing x:Name="LoadingRing" Width="40" Height="40" IsActive="False" Visibility="Collapsed" Foreground="{ThemeResource AccentTextBrush}" AutomationProperties.Name="読み込み中"/>
+                    </Grid>
+                    <StackPanel Grid.Row="2" Spacing="8">
+                        <InfoBar x:Name="BrowserError" IsOpen="False" IsClosable="False" Severity="Error" AutomationProperties.AutomationId="BrowserError">
+                            <InfoBar.ActionButton><Button Content="再試行" Click="Retry_Click" AutomationProperties.AutomationId="BrowserRetry"/></InfoBar.ActionButton>
+                        </InfoBar>
+                        <Button x:Name="RegisterButton" Content="このフォルダを使用" HorizontalAlignment="Stretch" Height="48" Visibility="Collapsed" Click="Register_Click" AutomationProperties.AutomationId="RegisterFolder"/>
+                        <Button x:Name="RemoveButton" Content="選択フォルダーの登録解除" Height="44" Visibility="Collapsed" Click="Remove_Click" AutomationProperties.AutomationId="RemoveFolder"/>
+                    </StackPanel>
+                    <TextBlock x:Name="BrowserHint" Grid.Row="3" Text="ファイルを選ぶと、その位置から同じフォルダーを連続再生します。" FontSize="12" TextWrapping="Wrap" Foreground="{ThemeResource MutedTextBrush}"/>
+                </Grid>
+            </Border>
+        </Grid>
+    </Grid>
+</Page>
