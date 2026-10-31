@@ -82,7 +82,28 @@ public sealed partial class MainPage
 
     private void Player_PlaybackStateChanged(MediaPlaybackSession sender, object args) => DispatcherQueue.TryEnqueue(() =>
     {
-        if (!disposed && mediaPlayer?.PlaybackSession == sender) UpdateCursorAutoHide();
+        if (disposed || mediaPlayer?.PlaybackSession != sender) return;
+        if (sender.PlaybackState == MediaPlaybackState.Playing)
+        {
+            playerHasPlayed = true;
+            expectedEnginePause = false;
+        }
+        else if (sender.PlaybackState == MediaPlaybackState.Paused && expectedEnginePause)
+            expectedEnginePause = false;
+        else if (sender.PlaybackState == MediaPlaybackState.Paused && playerHasPlayed && playbackState.CanPlay)
+        {
+            var stamp = playbackState.Stamp;
+            // Let a queued MediaEnded run first. Otherwise a natural end can be
+            // mistaken for an interruption and suppress continuous playback.
+            DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+            {
+                if (disposed || !playbackState.IsCurrent(stamp) || mediaPlayer?.PlaybackSession != sender ||
+                    sender.PlaybackState != MediaPlaybackState.Paused || expectedEnginePause) return;
+                playbackState.ObserveUnexpectedPause(sender.Position, sender.NaturalDuration);
+                if (!playbackState.CanPlay) ApplyPlaybackState();
+            });
+        }
+        UpdateCursorAutoHide();
     });
 
     private void DisposeCursorAutoHide()

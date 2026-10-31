@@ -131,7 +131,8 @@ try {
         UI @('invoke',$savedItem.selector,'--action','select'); UI @('invoke','RemoveFolder'); Wait 'PrimaryButton'
         UI @('invoke','PrimaryButton'); UI @('wait-for','ui-media','--gone','-t','3000')
         if (!(Test-Path -LiteralPath (Join-Path $mediaPath 'Sample OP.wav'))) { throw 'Media was removed.' }
-        UI @('invoke','BrowserCancel'); Wait 'ChooseFolder'; Capture '09-final-home'
+        UI @('invoke','BrowserCancel'); Wait 'VideoPlayer'
+        UI @('send-keys','h','--via','send-input'); Wait 'ChooseFolder'; Capture '09-final-home'
     }
 } catch {
     if (!$results.Count -or $results[$results.Count-1].status -ne 'FAIL') { $results.Add(@{ name='Suite execution'; status='FAIL'; detail="$_" }) }

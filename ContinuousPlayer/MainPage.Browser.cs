@@ -9,6 +9,7 @@ namespace ContinuousPlayer;
 
 public sealed partial class MainPage
 {
+    private enum BrowserCloseReason { Cancel, SelectionCommitted, Home, WindowClosed }
     private sealed record Location(string Kind, string Name, string Path = "", DlnaServer? Server = null,
         List<FolderNode>? Trail = null, bool Register = false, SavedFolder? Saved = null);
     private Location location = new("library", "保存済みフォルダー");
@@ -247,13 +248,21 @@ public sealed partial class MainPage
         else await NavigateAsync(new("library", "保存済みフォルダー"), false);
     }
 
-    private void CloseBrowser()
+    private void CloseBrowser(BrowserCloseReason reason = BrowserCloseReason.Cancel)
     {
         browserRequest++;
         browserCancellation?.Cancel();
         SetBrowserBusy(false);
         BrowserOverlay.Visibility = Visibility.Collapsed;
         Home.IsEnabled = true;
+        SetPlaybackInputEnabled(true);
+        var saved = browserSuspension;
+        browserSuspension = null;
+        if (reason == BrowserCloseReason.Cancel)
+        {
+            RestoreSuspension(saved);
+            _ = ShowPendingFailureAsync();
+        }
         if (!isPlayback) ChooseButton.Focus(FocusState.Programmatic);
     }
 

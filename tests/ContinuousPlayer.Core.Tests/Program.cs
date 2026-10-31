@@ -20,6 +20,9 @@ var fixture = Path.Combine(Path.GetTempPath(), "ContinuousPlayerTests-" + Guid.N
 Directory.CreateDirectory(fixture);
 try
 {
+    foreach (var (name, test) in PlaybackSessionStateTests.Cases())
+        await Test(name, () => Check(test));
+
     await Test("OP/ED numeric order, mixed case, omitted number", () => Check(() =>
     {
         var names = new[] { "作品 ED2.mp4", "作品 OP10.mp4", "作品 ED.mp4", "作品 op2.mp4", "作品 OP.mp4" };

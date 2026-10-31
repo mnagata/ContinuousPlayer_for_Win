@@ -26,17 +26,31 @@ public sealed partial class MainPage : Page
     {
         if (loaded) return;
         loaded = true;
+        ChooseButton.IsEnabled = false;
         App.Window.Closed += (_, _) => Cleanup();
-        App.Window.Activated += (_, args) =>
+        App.Window.Activated += Window_Activated;
+        try
         {
-            windowActive = args.WindowActivationState != WindowActivationState.Deactivated;
-            if (args.WindowActivationState == WindowActivationState.Deactivated && isPlayback && !dialogOpen && BrowserOverlay.Visibility != Visibility.Visible)
-                SetPaused(true, false);
-            UpdateCursorAutoHide();
-        };
+            interruptionMonitor = new(App.Window, PlaybackInterruptionChanged);
+            await interruptionMonitor.InitializeAudioAsync();
+            if (disposed) return;
+        }
+        catch (Exception ex)
+        {
+            if (disposed) return;
+            await ShowMessageAsync("中断監視", "ロック・スリープ・音声出力の監視を開始できませんでした。\n" + ex.Message);
+        }
         await library.LoadAsync();
+        if (disposed) return;
+        ChooseButton.IsEnabled = true;
         ChooseButton.Focus(FocusState.Programmatic);
         if (library.LoadWarning != null) await ShowMessageAsync("保存データ", library.LoadWarning);
+    }
+
+    private void Window_Activated(object sender, WindowActivatedEventArgs args)
+    {
+        windowActive = args.WindowActivationState != WindowActivationState.Deactivated;
+        UpdateCursorAutoHide();
     }
 
     private void Page_SizeChanged(object sender, SizeChangedEventArgs e)
@@ -58,7 +72,7 @@ public sealed partial class MainPage : Page
 
     private void GoHome()
     {
-        CloseBrowser();
+        CloseBrowser(BrowserCloseReason.Home);
         StopPlayback();
         ChooseButton.Focus(FocusState.Programmatic);
     }
@@ -135,8 +149,13 @@ public sealed partial class MainPage : Page
     {
         if (disposed) return;
         disposed = true;
+        App.Window.Activated -= Window_Activated;
+        activeInfoDialog?.Hide();
+        CloseBrowser(BrowserCloseReason.WindowClosed);
         browserCancellation?.Cancel();
         StopPlayback();
+        interruptionMonitor?.Dispose();
+        interruptionMonitor = null;
         DisposeCursorAutoHide();
         dlna.Dispose();
     }

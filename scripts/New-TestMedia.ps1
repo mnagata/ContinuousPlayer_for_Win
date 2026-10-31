@@ -1,4 +1,7 @@
-param([string]$Directory = (Join-Path $PSScriptRoot '..\.tools\ui-media'))
+param(
+    [string]$Directory = (Join-Path $PSScriptRoot '..\.tools\ui-media'),
+    [ValidateRange(45,600)][int]$DurationSeconds = 45
+)
 $ErrorActionPreference = 'Stop'
 $Directory = [IO.Path]::GetFullPath($Directory)
 New-Item -ItemType Directory -Force -Path $Directory | Out-Null
@@ -7,7 +10,7 @@ foreach ($name in @('Sample ED.wav', 'Sample OP.wav', 'Sample OP2.wav', 'Sample 
     $stream = [IO.File]::Create((Join-Path $Directory $name))
     $writer = [IO.BinaryWriter]::new($stream)
     try {
-        $length = 8000 * 2 * 45
+        $length = 8000 * 2 * $DurationSeconds
         $writer.Write([Text.Encoding]::ASCII.GetBytes('RIFF'))
         $writer.Write([int](36 + $length))
         $writer.Write([Text.Encoding]::ASCII.GetBytes('WAVEfmt '))

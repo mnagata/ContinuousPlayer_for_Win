@@ -19,8 +19,11 @@ public sealed partial class MainPage
     private MediaPlaybackItem? playbackItem;
     private readonly DisplayRequest displayRequest = new();
     private bool displayActive;
-    private bool isPlayback;
-    private bool userPaused;
+    private readonly PlaybackSessionState playbackState = new();
+    private bool isPlayback => playbackState.IsActive;
+    private bool userPaused => !playbackState.WantsPlayback || playbackState.HasTemporaryPause ||
+        playbackState.Interruptions != PlaybackInterruption.None ||
+        playbackState.Phase is PlaybackPhase.Ended or PlaybackPhase.Failed;
     private bool startingPlayback;
     private int mediaRequest;
     private Windows.Foundation.Point? pointerStart;
@@ -34,39 +37,46 @@ public sealed partial class MainPage
         var index = playlist.FindIndex(x => x.Id == selected.Id);
         if (index < 0) return;
         startingPlayback = true;
-        StopPlayback();
-        queue.Start(playlist, index);
-        playbackLocation = location with { Register = false };
-        isPlayback = true;
-        userPaused = false;
-        Home.Visibility = Visibility.Collapsed;
-        Playback.Visibility = Visibility.Visible;
-        ((MainWindow)App.Window).SetFullscreen(true);
-        mediaPlayer = new MediaPlayer { AutoPlay = false, IsLoopingEnabled = false };
+        try
+        {
+            StopPlayback();
+            queue.Start(playlist, index);
+            playbackLocation = location with { Register = false };
+            playbackState.Start();
+            var stamp = playbackState.Stamp;
+            Home.Visibility = Visibility.Collapsed;
+            Playback.Visibility = Visibility.Visible;
+            ((MainWindow)App.Window).SetFullscreen(true);
+            try { displayRequest.RequestActive(); displayActive = true; }
+            catch (Exception ex) { Debug.WriteLine(ex); }
+            // Keep the browser until the black playback surface has been laid out.
+            Playback.UpdateLayout();
+            await NextRenderingAsync();
+            if (!playbackState.IsCurrent(stamp) || disposed) return;
+            CloseBrowser(BrowserCloseReason.SelectionCommitted);
+            TouchSurface.Focus(FocusState.Programmatic);
+            await LoadCurrentAsync();
+        }
+        finally { startingPlayback = false; }
+    }
+
+    private MediaPlayer CreatePlayer()
+    {
+        var player = new MediaPlayer { AutoPlay = false, IsLoopingEnabled = false };
         // Custom gestures and transport controls share the same explicit pause state.
-        mediaPlayer.CommandManager.IsEnabled = false;
-        var transport = mediaPlayer.SystemMediaTransportControls;
+        player.CommandManager.IsEnabled = false;
+        var transport = player.SystemMediaTransportControls;
         transport.IsEnabled = true;
         transport.IsPlayEnabled = true;
         transport.IsPauseEnabled = true;
         transport.IsPreviousEnabled = true;
         transport.IsNextEnabled = true;
         transport.ButtonPressed += Transport_ButtonPressed;
-        mediaPlayer.MediaEnded += Player_MediaEnded;
-        mediaPlayer.MediaFailed += Player_MediaFailed;
-        mediaPlayer.MediaOpened += Player_MediaOpened;
-        mediaPlayer.PlaybackSession.PlaybackStateChanged += Player_PlaybackStateChanged;
-        Player.SetMediaPlayer(mediaPlayer);
-        try { displayRequest.RequestActive(); displayActive = true; }
-        catch (Exception ex) { Debug.WriteLine(ex); }
-        // Keep the browser until the black playback surface has been laid out.
-        Playback.UpdateLayout();
-        await NextRenderingAsync();
-        if (!isPlayback || disposed) { startingPlayback = false; return; }
-        CloseBrowser();
-        TouchSurface.Focus(FocusState.Programmatic);
-        await LoadCurrentAsync();
-        startingPlayback = false;
+        player.MediaEnded += Player_MediaEnded;
+        player.MediaFailed += Player_MediaFailed;
+        player.MediaOpened += Player_MediaOpened;
+        player.PlaybackSession.PlaybackStateChanged += Player_PlaybackStateChanged;
+        return player;
     }
 
     private static Task NextRenderingAsync()
@@ -84,18 +94,23 @@ public sealed partial class MainPage
 
     private async Task LoadCurrentAsync()
     {
-        if (!isPlayback || mediaPlayer == null || queue.Current is not { } current) return;
+        if (!isPlayback || queue.Current is not { } current) return;
         var request = ++mediaRequest;
+        playbackState.BeginMedia();
+        pendingFailure = null;
+        ReleasePlayer();
+        var player = CreatePlayer();
+        mediaPlayer = player;
+        playerHasPlayed = false;
+        expectedEnginePause = false;
+        Player.SetMediaPlayer(player);
+        interruptionMonitor?.TrackAudioOutput(player.AudioDevice?.Id, true);
         Vm.FileName = current.Name;
         Vm.MediaInfo = $"{System.IO.Path.GetFileNameWithoutExtension(current.Name)}\n{FormatSize(current.Size)}";
         Vm.PlaybackStatus = "読み込み中…";
         AudioTitle.Visibility = Visibility.Collapsed;
         PauseToolbar.Visibility = userPaused ? Visibility.Visible : Visibility.Collapsed;
-        mediaPlayer.Source = null;
         UpdateCursorAutoHide();
-        mediaSource?.Dispose();
-        mediaSource = null;
-        playbackItem = null;
         try
         {
             MediaSource source;
@@ -103,15 +118,15 @@ public sealed partial class MainPage
                 source = MediaSource.CreateFromUri(uri);
             else
                 source = MediaSource.CreateFromStorageFile(await StorageFile.GetFileFromPathAsync(current.Location));
-            if (request != mediaRequest || !isPlayback || mediaPlayer == null) { source.Dispose(); return; }
+            if (request != mediaRequest || !isPlayback || mediaPlayer != player) { source.Dispose(); return; }
             mediaSource = source;
             playbackItem = new MediaPlaybackItem(source);
-            mediaPlayer.Source = playbackItem;
-            var updater = mediaPlayer.SystemMediaTransportControls.DisplayUpdater;
+            player.Source = playbackItem;
+            var updater = player.SystemMediaTransportControls.DisplayUpdater;
             updater.Type = MediaPlaybackType.Video;
             updater.VideoProperties.Title = current.Name;
             updater.Update();
-            if (userPaused) mediaPlayer.Pause(); else mediaPlayer.Play();
+            ApplyPlaybackState();
             library.LastMediaId = current.Id;
             library.LastFolderKey = FindRegisteredAncestor(playbackLocation)?.Key;
             if (playbackLocation is { } folder)
@@ -142,6 +157,9 @@ public sealed partial class MainPage
     private void Player_MediaOpened(MediaPlayer sender, object args) => DispatcherQueue.TryEnqueue(() =>
     {
         if (sender != mediaPlayer || !isPlayback) return;
+        // A failed source must not become playable through a delayed open event.
+        if (playbackState.Phase == PlaybackPhase.Failed) return;
+        playbackState.Ready();
         var session = sender.PlaybackSession;
         Vm.PlaybackStatus = "";
         AudioTitle.Visibility = session.NaturalVideoWidth == 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -162,15 +180,21 @@ public sealed partial class MainPage
         updater.Type = session.NaturalVideoWidth == 0 ? MediaPlaybackType.Music : MediaPlaybackType.Video;
         if (updater.Type == MediaPlaybackType.Music) updater.MusicProperties.Title = Vm.FileName;
         updater.Update();
-        UpdateTransportState();
-        UpdateCursorAutoHide();
+        ApplyPlaybackState();
     });
 
     private void Player_MediaEnded(MediaPlayer sender, object args) => DispatcherQueue.TryEnqueue(async () =>
     {
         if (sender != mediaPlayer || !isPlayback) return;
+        if (playbackState.HasTemporaryPause || dialogOpen || BrowserOverlay.Visibility == Visibility.Visible)
+        {
+            playbackState.End();
+            ApplyPlaybackState();
+            return;
+        }
+        if (userPaused) return;
         if (queue.Move(1)) await LoadCurrentAsync();
-        else { SetPaused(true); Vm.PlaybackStatus = "すべてのファイルの再生が終了しました。"; }
+        else { playbackState.End(); ApplyPlaybackState(true); Vm.PlaybackStatus = "すべてのファイルの再生が終了しました。"; }
     });
 
     private void Player_MediaFailed(MediaPlayer sender, MediaPlayerFailedEventArgs args) => DispatcherQueue.TryEnqueue(async () =>
@@ -181,7 +205,7 @@ public sealed partial class MainPage
 
     private void Transport_ButtonPressed(SystemMediaTransportControls sender, SystemMediaTransportControlsButtonPressedEventArgs args) => DispatcherQueue.TryEnqueue(async () =>
     {
-        if (mediaPlayer == null || !isPlayback || sender != mediaPlayer.SystemMediaTransportControls) return;
+        if (mediaPlayer == null || !PlaybackInputAllowed || sender != mediaPlayer.SystemMediaTransportControls) return;
         switch (args.Button)
         {
             case SystemMediaTransportControlsButton.Play: SetPaused(false); break;
@@ -196,17 +220,21 @@ public sealed partial class MainPage
 
     private void SetPaused(bool paused, bool focus = true)
     {
-        if (mediaPlayer == null || !isPlayback) return;
-        userPaused = paused;
-        if (paused) mediaPlayer.Pause(); else mediaPlayer.Play();
-        PauseToolbar.Visibility = paused ? Visibility.Visible : Visibility.Collapsed;
-        UpdateCursorAutoHide();
-        UpdateTransportState();
-        if (focus)
+        if (mediaPlayer == null || !PlaybackInputAllowed) return;
+        if (!paused && playbackState.Phase == PlaybackPhase.Ended && playbackState.Interruptions == PlaybackInterruption.None)
         {
-            if (paused) ResumeButton.Focus(FocusState.Programmatic);
-            else TouchSurface.Focus(FocusState.Programmatic);
+            _ = RestartEndedAsync();
+            return;
         }
+        playbackState.RequestPlayback(!paused);
+        ApplyPlaybackState(focus);
+    }
+
+    private async Task RestartEndedAsync()
+    {
+        playbackState.RequestPlayback(true);
+        try { await LoadCurrentAsync(); }
+        catch (Exception ex) { if (isPlayback && !disposed) await ShowPlaybackErrorAsync(ex.Message, ex.HResult); }
     }
 
     private void UpdateTransportState()
@@ -220,12 +248,12 @@ public sealed partial class MainPage
 
     private async Task MoveMediaAsync(int delta)
     {
-        if (mediaPlayer != null && isPlayback && queue.Move(delta)) await LoadCurrentAsync();
+        if (mediaPlayer != null && PlaybackInputAllowed && queue.Move(delta)) await LoadCurrentAsync();
     }
 
     private async Task SeekAsync(int seconds)
     {
-        if (mediaPlayer == null || !isPlayback || !mediaPlayer.PlaybackSession.CanSeek) return;
+        if (mediaPlayer == null || !PlaybackInputAllowed || !mediaPlayer.PlaybackSession.CanSeek) return;
         var session = mediaPlayer.PlaybackSession;
         var seek = queue.Seek(session.Position, session.NaturalDuration, seconds);
         if (seek.Next) await MoveMediaAsync(1); else session.Position = seek.Position;
@@ -234,9 +262,16 @@ public sealed partial class MainPage
     private async Task ShowPlaybackErrorAsync(string message, int code)
     {
         if (!isPlayback || disposed) return;
-        SetPaused(true);
+        playbackState.Fail();
+        ApplyPlaybackState();
         Vm.PlaybackStatus = "再生できませんでした。Iキーで情報を確認するか、フォルダーから別のファイルを選択してください。";
-        if (dialogOpen) return;
+        if (dialogOpen || BrowserOverlay.Visibility == Visibility.Visible)
+        {
+            pendingFailure = (message, code);
+            return;
+        }
+        pendingFailure = null;
+        var stamp = playbackState.Stamp;
         dialogOpen = true;
         ContentDialogResult result;
         try
@@ -246,62 +281,91 @@ public sealed partial class MainPage
                 PrimaryButtonText = "再試行", SecondaryButtonText = "別のファイルを選ぶ", CloseButtonText = "キャンセル" }.ShowAsync();
         }
         finally { dialogOpen = false; }
-        if (!isPlayback || disposed) return;
-        if (result == ContentDialogResult.Primary) { userPaused = false; await LoadCurrentAsync(); }
+        if (!playbackState.IsCurrent(stamp) || disposed) return;
+        if (result == ContentDialogResult.Primary) { playbackState.RequestPlayback(true); await LoadCurrentAsync(); }
         else if (result == ContentDialogResult.Secondary) await ReturnToFolderAsync();
     }
 
     private async Task ShowInfoAsync()
     {
-        if (!isPlayback || mediaPlayer == null) return;
+        if (!PlaybackInputAllowed || mediaPlayer == null) return;
+        var saved = playbackState.Suspend(mediaPlayer.PlaybackSession.Position);
+        ApplyPlaybackState();
         var output = mediaPlayer.AudioDevice?.Name ?? "Windows既定の再生デバイス";
-        await ShowMessageAsync("再生情報", $"{Vm.FileName}\n\n{Vm.MediaInfo}\n\n{queue.Index + 1} / {queue.Items.Count}\n音声出力: {output}\n再生基盤: Windows MediaPlayer\n音声: Windows標準ミキサー（共有モード）\nBit-Perfect / WASAPI排他出力: 未対応\n\n左右タップ: ±10秒 / 中央タップ: 再生切り替え\n左スワイプ: 次 / 右スワイプ: 前\nEsc: 再生元フォルダー / F11: 全画面切り替え");
+        var text = new TextBlock { Text = $"{Vm.FileName}\n\n{Vm.MediaInfo}\n再生位置: {saved.Position:hh\\:mm\\:ss}\n\n{queue.Index + 1} / {queue.Items.Count}\n音声出力: {output}\n再生基盤: Windows MediaPlayer\n音声: Windows標準ミキサー（共有モード）\nBit-Perfect / WASAPI排他出力: 未対応\n\n左右タップ: ±10秒 / 中央タップ: 再生切り替え\n左スワイプ: 次 / 右スワイプ: 前\nEsc: 再生元フォルダー / F11: 全画面切り替え", TextWrapping = TextWrapping.Wrap, IsTextSelectionEnabled = true };
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetAutomationId(text, "MediaInfoText");
+        var dialog = new ContentDialog { XamlRoot = XamlRoot, RequestedTheme = ElementTheme.Dark, Title = "再生情報",
+            Content = new ScrollViewer { MaxHeight = 400, Content = text }, CloseButtonText = "閉じる" };
+        dialog.AddHandler(KeyDownEvent, new KeyEventHandler((_, e) =>
+        {
+            if (e.KeyStatus.WasKeyDown || e.Key is not (Windows.System.VirtualKey.I or Windows.System.VirtualKey.Escape)) return;
+            e.Handled = true;
+            dialog.Hide();
+        }), true);
+        dialogOpen = true;
+        activeInfoDialog = dialog;
+        UpdateCursorAutoHide();
+        try { await dialog.ShowAsync(); }
+        finally
+        {
+            activeInfoDialog = null;
+            dialogOpen = false;
+            RestoreSuspension(saved);
+        }
+        await ShowPendingFailureAsync();
     }
 
     private async Task ReturnToFolderAsync()
     {
+        if (!PlaybackInputAllowed || mediaPlayer == null) return;
         var target = playbackLocation;
         var selected = queue.Current?.Id;
-        StopPlayback();
-        if (target == null) { await OpenLibraryAsync(); return; }
-        // Rediscover DLNA by stable server ID, rather than reusing old URLs.
-        if (target.Kind == "dlna" && target.Server is { } server)
-            target = target with { Server = null, Saved = new("dlna", target.Name, target.Path, server.Id, server.Name, target.Trail) };
+        browserSuspension = playbackState.Suspend(mediaPlayer.PlaybackSession.Position);
+        ApplyPlaybackState();
         BrowserOverlay.Visibility = Visibility.Visible;
         Home.IsEnabled = false;
+        SetPlaybackInputEnabled(false);
         browserHistory.Clear();
-        await NavigateAsync(target, false, selected);
+        await NavigateAsync(target ?? new("library", "保存済みフォルダー"), false, selected);
     }
 
     private void StopPlayback()
     {
         mediaRequest++;
-        isPlayback = false;
+        playbackState.Stop();
+        browserSuspension = null;
+        pendingFailure = null;
         UpdateCursorAutoHide();
-        userPaused = false;
-        if (mediaPlayer != null)
-        {
-            mediaPlayer.MediaEnded -= Player_MediaEnded;
-            mediaPlayer.MediaFailed -= Player_MediaFailed;
-            mediaPlayer.MediaOpened -= Player_MediaOpened;
-            mediaPlayer.PlaybackSession.PlaybackStateChanged -= Player_PlaybackStateChanged;
-            mediaPlayer.SystemMediaTransportControls.ButtonPressed -= Transport_ButtonPressed;
-            mediaPlayer.SystemMediaTransportControls.IsEnabled = false;
-            mediaPlayer.Pause();
-            Player.SetMediaPlayer(null);
-            mediaPlayer.Source = null;
-            mediaPlayer.Dispose();
-            mediaPlayer = null;
-        }
-        mediaSource?.Dispose();
-        mediaSource = null;
-        playbackItem = null;
+        ReleasePlayer();
+        interruptionMonitor?.TrackAudioOutput(null, false);
         if (displayActive) { displayRequest.RequestRelease(); displayActive = false; }
         Playback.Visibility = Visibility.Collapsed;
         PauseToolbar.Visibility = Visibility.Collapsed;
         Home.Visibility = Visibility.Visible;
         Vm.PlaybackStatus = "";
         if (!disposed) ((MainWindow)App.Window).SetFullscreen(false);
+    }
+
+    private void ReleasePlayer()
+    {
+        if (mediaPlayer != null)
+        {
+            var old = mediaPlayer;
+            mediaPlayer = null;
+            old.MediaEnded -= Player_MediaEnded;
+            old.MediaFailed -= Player_MediaFailed;
+            old.MediaOpened -= Player_MediaOpened;
+            old.PlaybackSession.PlaybackStateChanged -= Player_PlaybackStateChanged;
+            old.SystemMediaTransportControls.ButtonPressed -= Transport_ButtonPressed;
+            old.SystemMediaTransportControls.IsEnabled = false;
+            old.Pause();
+            Player.SetMediaPlayer(null);
+            old.Source = null;
+            old.Dispose();
+        }
+        mediaSource?.Dispose();
+        mediaSource = null;
+        playbackItem = null;
     }
 
     private static string FormatSize(long bytes) => bytes < 0 ? "サイズ不明" : bytes >= 1024 * 1024 * 1024 ? $"{bytes / (1024.0 * 1024 * 1024):F2} GB" : $"{bytes / (1024.0 * 1024):F1} MB";
