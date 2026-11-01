@@ -38,7 +38,7 @@ public sealed partial class MainPage
         {
             StopPlayback();
             queue.Start(playlist, index);
-            playbackLocation = location with { Register = false };
+            playbackLocation = location with { Register = false, Saved = location.Saved ?? FindRegisteredAncestor(location) };
             playbackState.Start();
             var stamp = playbackState.Stamp;
             Home.Visibility = Visibility.Collapsed;

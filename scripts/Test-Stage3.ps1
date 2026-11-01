@@ -1,8 +1,9 @@
-# Local packaged-app presentation acceptance. Uses owned media, no registrations.
+# Local packaged-app presentation acceptance. Uses a temporary owned registration.
 param([string]$VideoPath = (Join-Path $PSScriptRoot '..\.tools\cursor-media\Cursor test.mp4'))
 $ErrorActionPreference='Stop'
 $PSNativeCommandUseErrorActionPreference=$false
 $repo=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+. (Join-Path $PSScriptRoot 'Migration-TestRegistration.ps1')
 $id=(Get-Date -Format 'yyyyMMdd-HHmmss')+'-'+[guid]::NewGuid().ToString('N').Substring(0,8)
 $artifacts=Join-Path $repo "ui-test-artifacts\stage3\$id"
 $fixture=Join-Path $repo ".tools\stage3-media\$id"
@@ -38,7 +39,7 @@ function PickFolder {
     $t=UI @('inspect','--json','-d','12') -Window $pickerHwnd | ConvertFrom-Json
     $confirm=@(Nodes @($t.windows | ForEach-Object {$_.elements})) | Where-Object {$_.type -eq 'Button' -and $_.automationId -eq '1'} | Select-Object -First 1
     if(!$confirm){throw 'Picker confirm unavailable.'};UI @('invoke',$confirm.selector) -Window $pickerHwnd | Out-Null
-    Wait 'Sample OP.wav'
+    Register-TestFixture $fixture;Wait 'Sample OP.wav'
 }
 function CheckLayout([string]$Name){
     $items=Inspect;$ids=@('PlayerHome','PlaybackFolder','PlaybackInfo','PreviousFile','SeekBackward','Resume','SeekForward','NextFile')
@@ -159,11 +160,12 @@ try {
     }
 } catch {if(!$results.Count -or $results[$results.Count-1].status -ne 'FAIL'){$results.Add(@{name='Setup / execution';status='FAIL';detail="$_"})};Write-Host "FAIL $_"}
 finally {
+    try{if($appPid -gt 0 -and (Get-Process -Id $appPid -ErrorAction SilentlyContinue)){Remove-TestFixtureRegistration}}catch{$results.Add(@{name='Fixture registration cleanup';status='FAIL';detail="$_"})}
     if($hwnd -and (Get-Process -Id $appPid -ErrorAction SilentlyContinue)){[Stage3Native]::Close($hwnd)}
     try{Checked @('ui','yield') | Out-Null}catch{$results.Add(@{name='Release UI workflow';status='FAIL';detail="$_"})}
     $env:WINAPP_UI_WORKFLOW_ID=$priorWorkflow;$env:DOTNET_CLI_TELEMETRY_OPTOUT=$priorTelemetry
 }
 $failed=@($results | Where-Object {$_.status -eq 'FAIL'}).Count
-@{target='local';appPid=$appPid;passed=$results.Count-$failed;failed=$failed;results=@($results.ToArray());screenshots=@($screenshots.ToArray());observations=@($observations.ToArray());fixture=$fixture;registeredFolders=$false} | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath (Join-Path $artifacts 'results.json') -Encoding utf8
+@{target='local';appPid=$appPid;passed=$results.Count-$failed;failed=$failed;results=@($results.ToArray());screenshots=@($screenshots.ToArray());observations=@($observations.ToArray());fixture=$fixture;registeredFolders=$script:testFixtureWasRegistered;remainingTestRegistration=$script:registeredFixtureName} | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath (Join-Path $artifacts 'results.json') -Encoding utf8
 Write-Host "Passed: $($results.Count-$failed); Failed: $failed; Report: $artifacts\results.json"
 if($failed){exit 1}

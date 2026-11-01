@@ -219,7 +219,7 @@ try {
             $row = Inspect | Where-Object {$_.type -eq 'ListItem' -and $_.name.StartsWith($name+'。')} | Select-Object -First 1
             if(!$row){throw "Missing test registration: $name"}
             UI @('invoke',$row.selector,'--action','select') | Out-Null
-            UI @('invoke','RemoveFolder') | Out-Null; Wait 'PrimaryButton'
+            Keys 'delete'; Wait 'PrimaryButton'
             UI @('invoke','PrimaryButton') | Out-Null; Gone $name
             $registered.Remove($name) | Out-Null
         }
@@ -245,7 +245,7 @@ try {
                 $row = Inspect | Where-Object {$_.type -eq 'ListItem' -and $_.name.StartsWith($name+'。')} | Select-Object -First 1
                 if(!$row){throw "Cannot find test registration $name"}
                 UI @('invoke',$row.selector,'--action','select') | Out-Null
-                UI @('invoke','RemoveFolder') | Out-Null; Wait 'PrimaryButton'
+                Keys 'delete'; Wait 'PrimaryButton'
                 UI @('invoke','PrimaryButton') | Out-Null; Gone $name
                 $registered.Remove($name) | Out-Null
             }

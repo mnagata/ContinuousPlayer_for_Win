@@ -10,6 +10,12 @@ if (@(Get-ChildItem -LiteralPath (Split-Path -Parent $VideoPath)).Count -ne 1) {
 }
 $ArtifactDirectory = [IO.Path]::GetFullPath($ArtifactDirectory)
 New-Item -ItemType Directory -Force -Path $ArtifactDirectory | Out-Null
+. (Join-Path $PSScriptRoot 'Migration-TestRegistration.ps1')
+$fixture=Join-Path $PSScriptRoot ('..\.tools\cursor-regression\'+[guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Force -Path $fixture | Out-Null
+Copy-Item -LiteralPath $VideoPath -Destination (Join-Path $fixture (Split-Path -Leaf $VideoPath))
+$priorWorkflow=$env:WINAPP_UI_WORKFLOW_ID
+$env:WINAPP_UI_WORKFLOW_ID='cursor-regression-'+[guid]::NewGuid().ToString('N')
 # Use guarded Win32 input and inspect the OS cursor directly. UIA traversal of the
 # playing MediaPlayerElement can crash this environment's UI Automation provider.
 Add-Type @'
@@ -70,7 +76,9 @@ $w=[NativeCursorTest]::Main($AppPid)
 if ($w -eq [IntPtr]::Zero) { throw 'Main window not found.' }
 [NativeCursorTest]::SetForegroundWindow($w) | Out-Null
 Start-Sleep -Milliseconds 700
-function Key([int]$vk) { [NativeCursorTest]::KeyPress($w,$vk); Start-Sleep -Milliseconds 500 }
+$script:infoOpen=$false
+function UI([string[]]$Arguments){$r=@(& winapp ui @Arguments -w "$w");if($LASTEXITCODE){throw ($r -join "`n")};$r}
+function Key([int]$vk) { [NativeCursorTest]::KeyPress($w,$vk); Start-Sleep -Milliseconds 500; if($vk -eq 73){$script:infoOpen=$true};if($vk -eq 27){$script:infoOpen=$false} }
 function Check([string]$name,[bool]$expected) {
     $actual=[NativeCursorTest]::Visible($w)
     $position=[NativeCursorTest]::Position()
@@ -89,8 +97,9 @@ for($i=0;$i -lt 40 -and $picker -eq [IntPtr]::Zero;$i++) { $picker=[NativeCursor
 if($picker -eq [IntPtr]::Zero) { throw 'Folder picker not found.' }
 [NativeCursorTest]::SetForegroundWindow($picker) | Out-Null
 Start-Sleep -Milliseconds 300
-[NativeCursorTest]::SelectFolder($picker,(Split-Path -Parent $VideoPath))
+[NativeCursorTest]::SelectFolder($picker,[IO.Path]::GetFullPath($fixture))
 Start-Sleep -Milliseconds 800
+Register-TestFixture $fixture
 Key 13
 Start-Sleep -Milliseconds 2000
 Start-Sleep -Milliseconds 300
@@ -122,6 +131,10 @@ Check 'Home restores' $true
     $results.Add(@{ name='Cursor test execution'; status='FAIL'; detail="$_" })
     Write-Host "FAIL $_"
 } finally {
+    try{if($script:registeredFixtureName){[NativeCursorTest]::Guard($w);if($script:infoOpen){Key 27};Key 72;Remove-TestFixtureRegistration}}
+    catch{$results.Add(@{name='Owned fixture registration cleanup';status='FAIL';detail="$_"})}
+    try{UI @('yield') | Out-Null}catch{$results.Add(@{name='Release UI workflow';status='FAIL';detail="$_"})}
+    $env:WINAPP_UI_WORKFLOW_ID=$priorWorkflow
     $failed=@($results | Where-Object { $_.status -eq 'FAIL' }).Count
     @{ target='local'; appPid=$AppPid; results=@($results.ToArray()); failed=$failed } |
         ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $ArtifactDirectory 'results.json') -Encoding utf8

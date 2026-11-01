@@ -1,8 +1,9 @@
-# Local input acceptance batch. Uses valid silent media without registering folders.
+# Local input acceptance batch. Registers and removes its uniquely named fixture.
 param([switch]$SkipActivationProbe)
 $ErrorActionPreference='Stop'
 $PSNativeCommandUseErrorActionPreference=$false
 $repo=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+. (Join-Path $PSScriptRoot 'Migration-TestRegistration.ps1')
 $id=(Get-Date -Format 'yyyyMMdd-HHmmss')+'-'+[guid]::NewGuid().ToString('N').Substring(0,8)
 $artifacts=Join-Path $repo "ui-test-artifacts\stage2\$id"
 $fixture=Join-Path $repo ".tools\stage2-media\$id"
@@ -99,7 +100,8 @@ try{
     $pickerHwnd=[string]$picker.hwnd
     UI @('set-value','1152',$fixture) -Window $pickerHwnd | Out-Null
     $button=Inspect $pickerHwnd | Where-Object {$_.type -eq 'Button' -and $_.automationId -eq '1'} | Select-Object -First 1
-    if(!$button){throw 'No native picker confirmation button.'};UI @('invoke',$button.selector) -Window $pickerHwnd | Out-Null;Wait 'Sample OP.wav'
+    if(!$button){throw 'No native picker confirmation button.'};UI @('invoke',$button.selector) -Window $pickerHwnd | Out-Null
+    Register-TestFixture $fixture;Wait 'Sample OP.wav'
     Case 'S19: horizontal pages use the visible list, PageUp returns, ends never wrap' {
         $visible=VisibleCount;Keys 'right';$index=CheckPage $visible 'right-page'
         $visible=VisibleCount;Keys 'vk=0x21';$null=CheckPage ([math]::Max(0,$index-$visible)) 'page-up'
@@ -179,6 +181,7 @@ try{
 }catch{if(!$results.Count -or $results[$results.Count-1].status -ne 'FAIL'){$results.Add(@{name='Setup / execution';status='FAIL';detail="$_"})};Write-Host "FAIL $_"}
 finally{
     [Stage2Native]::Release();[Stage2Native]::CloseProbe()
+    try{if($appPid -gt 0 -and (Get-Process -Id $appPid -ErrorAction SilentlyContinue)){Remove-TestFixtureRegistration}}catch{$results.Add(@{name='Fixture registration cleanup';status='FAIL';detail="$_"})}
     if($hwnd -and (Get-Process -Id $appPid -ErrorAction SilentlyContinue)){[Stage2Native]::Close($hwnd)}
     try{Checked @('ui','yield') | Out-Null}catch{$results.Add(@{name='Release UI workflow';status='FAIL';detail="$_"})}
     $env:WINAPP_UI_WORKFLOW_ID=$priorWorkflow;$env:DOTNET_CLI_TELEMETRY_OPTOUT=$priorTelemetry
@@ -186,6 +189,6 @@ finally{
 $failed=@($results | Where-Object {$_.status -eq 'FAIL'}).Count
 $passed=@($results | Where-Object {$_.status -eq 'PASS'}).Count
 $skipped=@($results | Where-Object {$_.status -eq 'SKIP'}).Count
-@{target='local';appPid=$appPid;passed=$passed;failed=$failed;skipped=$skipped;results=@($results.ToArray());observations=@($observations.ToArray());screenshots=@($screenshots.ToArray());fixture=$fixture;registeredFolders=$false} | ConvertTo-Json -Depth 7 | Set-Content -LiteralPath (Join-Path $artifacts 'results.json') -Encoding utf8
+@{target='local';appPid=$appPid;passed=$passed;failed=$failed;skipped=$skipped;results=@($results.ToArray());observations=@($observations.ToArray());screenshots=@($screenshots.ToArray());fixture=$fixture;registeredFolders=$script:testFixtureWasRegistered;remainingTestRegistration=$script:registeredFixtureName} | ConvertTo-Json -Depth 7 | Set-Content -LiteralPath (Join-Path $artifacts 'results.json') -Encoding utf8
 Write-Host "Passed: $passed; Failed: $failed; Skipped: $skipped; Report: $artifacts\results.json"
 if($failed){exit 1}

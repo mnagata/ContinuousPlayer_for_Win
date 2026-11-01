@@ -78,18 +78,18 @@ try {
         Wait 'PC / ローカルフォルダー'
     }
     $mediaPath = & (Join-Path $PSScriptRoot 'New-TestMedia.ps1')
-    Case 'Native picker opens local media and excludes AppleDouble' {
+    Case 'Native picker selects a registration folder without starting playback' {
         UI @('click','PC / ローカルフォルダー'); $pickerWindow = Picker
         UI @('set-value','1152', $mediaPath) -Window $pickerWindow; PickerButton $pickerWindow '1'
-        Wait 'RegisterFolder'; Wait 'Sample OP.wav'
-        $items = @(Inspect | Where-Object { $_.type -eq 'ListItem' })
-        $names = @($items | ForEach-Object { ($_.name -split '。')[0] })
-        if (($names -join '|') -ne 'Sample OP.wav|Sample ED.wav|Sample OP2.wav|Sample ED2.wav') { throw "Unexpected media order: $($names -join '|')" }
-        Capture '04-files'
+        Wait 'RegisterFolder'; UI @('wait-for','VideoPlayer','--gone','-t','2000')
+        Capture '04-registration-folder'
     }
     Case 'Register local folder and reopen from library' {
         UI @('invoke','RegisterFolder'); Wait 'ui-media'; Capture '05-registered'
         UI @('click','ui-media'); Wait 'Sample OP.wav'
+        $items = @(Inspect | Where-Object { $_.type -eq 'ListItem' })
+        $names = @($items | ForEach-Object { ($_.name -split '。')[0] })
+        if (($names -join '|') -ne 'Sample OP.wav|Sample ED.wav|Sample OP2.wav|Sample ED2.wav') { throw "Unexpected media order: $($names -join '|')" }
     }
     Case 'Keyboard Enter starts playback and Space pauses' {
         UI @('send-keys','enter','--target','Sample OP.wav','--via','send-input'); Wait 'VideoPlayer'
@@ -130,10 +130,10 @@ try {
         Capture '08-returned'
     }
     Case 'Offline-safe unregister confirmation does not delete media' {
-        UI @('invoke','BrowserBack'); Wait 'RemoveFolder'
+        UI @('invoke','BrowserBack'); Wait 'BrowserList'
         $savedItem = Inspect | Where-Object { $_.type -eq 'ListItem' -and $_.name.StartsWith('ui-media。') } | Select-Object -First 1
         if (!$savedItem) { throw 'Saved test folder was not found.' }
-        UI @('invoke',$savedItem.selector,'--action','select'); UI @('invoke','RemoveFolder'); Wait 'PrimaryButton'
+        UI @('invoke',$savedItem.selector,'--action','select'); UI @('send-keys','delete','--via','send-input'); Wait 'PrimaryButton'
         UI @('invoke','PrimaryButton'); UI @('wait-for','ui-media','--gone','-t','3000')
         if (!(Test-Path -LiteralPath (Join-Path $mediaPath 'Sample OP.wav'))) { throw 'Media was removed.' }
         UI @('invoke','BrowserCancel'); Wait 'VideoPlayer'

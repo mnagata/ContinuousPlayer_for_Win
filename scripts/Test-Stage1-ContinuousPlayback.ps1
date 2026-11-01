@@ -1,8 +1,9 @@
 # Focused regression for the per-file MediaPlayer replacement introduced in stage 1.
-# No registrations or user files are changed.
+# Its unique fixture registration is removed on exit; user files are unchanged.
 $ErrorActionPreference='Stop'
 $PSNativeCommandUseErrorActionPreference=$false
 $repo=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+. (Join-Path $PSScriptRoot 'Migration-TestRegistration.ps1')
 $id=(Get-Date -Format 'yyyyMMdd-HHmmss')+'-'+[guid]::NewGuid().ToString('N').Substring(0,8)
 $artifacts=Join-Path $repo "ui-test-artifacts\stage1-continuous\$id"
 $media=Join-Path $repo ".tools\stage1-continuous\$id"
@@ -37,6 +38,7 @@ try{
     $button=@(Nodes @($tree.windows | ForEach-Object {$_.elements})) | Where-Object {$_.type -eq 'Button' -and $_.automationId -eq '1'} | Select-Object -First 1
     if(!$button){throw 'No picker confirm button.'}
     UI @('invoke',$button.selector) -Window $pickerHwnd | Out-Null
+    Register-TestFixture $media
     Wait 'Sample OP.wav';UI @('click','Sample OP.wav') | Out-Null;Wait 'VideoPlayer'
     Start-Sleep -Milliseconds 800
     UI @('focus','TouchSurface') | Out-Null
@@ -80,6 +82,7 @@ try{
     'PASS Explicit replay of the final file starts at zero.'
 }catch{$errorText="$_";Write-Host "FAIL $errorText"}
 finally{
+    try{if($appPid -gt 0 -and (Get-Process -Id $appPid -ErrorAction SilentlyContinue)){Remove-TestFixtureRegistration}}catch{if(!$errorText){$errorText="Fixture cleanup: $_"}else{$errorText+="; Fixture cleanup: $_"}}
     try{if($appPid -gt 0 -and (Get-Process -Id $appPid -ErrorAction SilentlyContinue)){
         $tree=UI @('inspect','--json','-d','12') | ConvertFrom-Json
         $items=@(Nodes @($tree.windows | ForEach-Object {$_.elements}))

@@ -26,6 +26,8 @@ try
         await Test(name, () => Check(test));
     foreach (var (name, test) in PlaybackPresentationTests.Cases())
         await Test(name, () => Check(test));
+    foreach (var (name, test) in BrowserSelectionTests.Cases())
+        await Test(name, test);
 
     await Test("OP/ED numeric order, mixed case, omitted number", () => Check(() =>
     {

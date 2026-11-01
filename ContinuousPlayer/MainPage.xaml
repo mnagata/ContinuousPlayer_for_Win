@@ -64,37 +64,39 @@
                     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                     <Grid ColumnSpacing="8">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="48"/><ColumnDefinition Width="96"/><ColumnDefinition Width="*"/><ColumnDefinition Width="48"/></Grid.ColumnDefinitions>
-                        <Button x:Name="BackButton" Width="48" Height="48" CornerRadius="24" Click="Back_Click" AutomationProperties.AutomationId="BrowserBack" AutomationProperties.Name="上の階層へ" ToolTipService.ToolTip="戻る (Alt+←)"><FontIcon Glyph="&#xE72B;"/></Button>
+                        <Button x:Name="BackButton" Width="48" Height="48" CornerRadius="24" Click="Back_Click" AutomationProperties.AutomationId="BrowserBack" AutomationProperties.Name="上のフォルダー" ToolTipService.ToolTip="上のフォルダー (Alt+←)"><FontIcon Glyph="&#xE72B;"/></Button>
                         <Button Grid.Column="1" Content="キャンセル" Height="48" CornerRadius="24" Click="Cancel_Click" AutomationProperties.AutomationId="BrowserCancel"/>
                         <TextBlock Grid.Column="2" Text="{x:Bind Vm.BrowserTitle, Mode=OneWay}" FontSize="18" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" AutomationProperties.AutomationId="BrowserTitle" ToolTipService.ToolTip="{x:Bind Vm.BrowserTitle, Mode=OneWay}"/>
                         <Button x:Name="RefreshButton" Grid.Column="3" Width="48" Height="48" CornerRadius="24" Click="Refresh_Click" AutomationProperties.AutomationId="BrowserRefresh" AutomationProperties.Name="再読み込み" ToolTipService.ToolTip="再読み込み (F5)"><FontIcon Glyph="&#xE72C;"/></Button>
                     </Grid>
                     <Grid Grid.Row="1">
-                        <ListView x:Name="BrowserList" ItemsSource="{x:Bind Vm.Rows, Mode=OneTime}" IsItemClickEnabled="True" ItemClick="Browser_ItemClick" SelectionMode="Single" HorizontalContentAlignment="Stretch" AutomationProperties.AutomationId="BrowserList" AutomationProperties.Name="フォルダーとメディア" RightTapped="Browser_RightTapped" Holding="Browser_Holding">
+                        <ListView x:Name="BrowserList" ItemsSource="{x:Bind Vm.Rows, Mode=OneTime}" IsItemClickEnabled="True" ItemClick="Browser_ItemClick" ContainerContentChanging="Browser_ContainerContentChanging" SelectionMode="Single" HorizontalContentAlignment="Stretch" AutomationProperties.AutomationId="BrowserList" AutomationProperties.Name="フォルダーとメディア" RightTapped="Browser_RightTapped" Holding="Browser_Holding">
                             <ListView.ItemContainerStyle><Style TargetType="ListViewItem"><Setter Property="MinHeight" Value="52"/><Setter Property="Margin" Value="0,1"/><Setter Property="Padding" Value="12,4"/><Setter Property="HorizontalContentAlignment" Value="Stretch"/><Setter Property="FocusVisualPrimaryBrush" Value="{ThemeResource AccentTextBrush}"/><Setter Property="FocusVisualPrimaryThickness" Value="3"/></Style></ListView.ItemContainerStyle>
                             <ListView.ItemTemplate>
                                 <DataTemplate x:DataType="vm:BrowserRow">
-                                    <Grid ColumnSpacing="16" AutomationProperties.Name="{x:Bind AccessibleName, Mode=OneTime}">
-                                        <Grid.ColumnDefinitions><ColumnDefinition Width="36"/><ColumnDefinition Width="*"/><ColumnDefinition Width="24"/></Grid.ColumnDefinitions>
+                                    <Grid ColumnSpacing="12" ToolTipService.ToolTip="{x:Bind Name, Mode=OneTime}">
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="36"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="24"/></Grid.ColumnDefinitions>
                                         <FontIcon Glyph="{x:Bind Glyph, Mode=OneTime}" Foreground="{ThemeResource AccentTextBrush}" FontSize="24"/>
                                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                            <TextBlock Text="{x:Bind Name, Mode=OneTime}" FontSize="20" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis"/>
+                                            <TextBlock Text="{x:Bind VisibleName, Mode=OneTime}" AutomationProperties.Name="{x:Bind Name, Mode=OneTime}" FontSize="20" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis"/>
                                             <TextBlock Text="{x:Bind Detail, Mode=OneTime}" FontSize="12" Foreground="{ThemeResource MutedTextBrush}" TextTrimming="CharacterEllipsis"/>
                                         </StackPanel>
-                                        <FontIcon Grid.Column="2" Glyph="{x:Bind Chevron, Mode=OneTime}" FontSize="16"/>
+                                        <Border Grid.Column="2" VerticalAlignment="Center" BorderBrush="{ThemeResource BrowserStrokeBrush}" BorderThickness="1" CornerRadius="4" Padding="4,2" Visibility="{x:Bind local:MainPage.BadgeVisibility(HasFormatBadge), Mode=OneTime}">
+                                            <TextBlock Text="{x:Bind FormatBadge, Mode=OneTime}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource AccentTextBrush}"/>
+                                        </Border>
+                                        <FontIcon Grid.Column="3" Glyph="{x:Bind Chevron, Mode=OneTime}" FontSize="16"/>
                                     </Grid>
                                 </DataTemplate>
                             </ListView.ItemTemplate>
                         </ListView>
                         <TextBlock Text="{x:Bind Vm.EmptyMessage, Mode=OneWay}" TextAlignment="Center" TextWrapping="Wrap" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="24" Foreground="{ThemeResource MutedTextBrush}" IsHitTestVisible="False"/>
-                        <ProgressRing x:Name="LoadingRing" Width="40" Height="40" IsActive="False" Visibility="Collapsed" Foreground="{ThemeResource AccentTextBrush}" AutomationProperties.Name="読み込み中"/>
+                        <ProgressRing x:Name="LoadingRing" Width="40" Height="40" IsActive="False" Visibility="Collapsed" Foreground="{ThemeResource AccentTextBrush}" AutomationProperties.AutomationId="BrowserLoading" AutomationProperties.Name="読み込み中"/>
                     </Grid>
                     <StackPanel Grid.Row="2" Spacing="8">
                         <InfoBar x:Name="BrowserError" IsOpen="False" IsClosable="False" Severity="Error" AutomationProperties.AutomationId="BrowserError">
                             <InfoBar.ActionButton><Button Content="再試行" Click="Retry_Click" AutomationProperties.AutomationId="BrowserRetry"/></InfoBar.ActionButton>
                         </InfoBar>
-                        <Button x:Name="RegisterButton" Content="このフォルダを使用" HorizontalAlignment="Stretch" Height="48" Visibility="Collapsed" Click="Register_Click" AutomationProperties.AutomationId="RegisterFolder"/>
-                        <Button x:Name="RemoveButton" Content="選択フォルダーの登録解除" Height="44" Visibility="Collapsed" Click="Remove_Click" AutomationProperties.AutomationId="RemoveFolder"/>
+                        <Button x:Name="RegisterButton" Content="このフォルダーを登録" HorizontalAlignment="Stretch" Height="48" Visibility="Collapsed" Click="Register_Click" AutomationProperties.AutomationId="RegisterFolder"/>
                     </StackPanel>
                     <TextBlock x:Name="BrowserHint" Grid.Row="3" Text="ファイルを選ぶと、その位置から同じフォルダーを連続再生します。" FontSize="12" TextWrapping="Wrap" Foreground="{ThemeResource MutedTextBrush}"/>
                 </Grid>
