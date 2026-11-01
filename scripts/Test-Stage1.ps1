@@ -131,6 +131,7 @@ try {
     Case 'Setup: registered silent fixture, playback and source focus' {
         Wait 'ChooseFolder'
         UI @('wait-for','ChooseFolder','-p','IsEnabled','--value','True','-t','10000') | Out-Null
+        UI @('focus','ChooseFolder') | Out-Null
         UI @('invoke','ChooseFolder') | Out-Null
         Register-Folder $folderA
         UI @('click',(Split-Path -Leaf $folderA)) | Out-Null; Wait 'Sample OP.wav'

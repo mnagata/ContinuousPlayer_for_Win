@@ -47,7 +47,7 @@ public sealed partial class MainPage
         ProtectedCursor = cursor;
         TouchSurface.SetCursor(cursor);
         if (XamlRoot?.ContentIsland is { } island) InputPointerSource.GetForIsland(island).Cursor = cursor;
-        if (hidden && activePointer == null) Interop.PlaybackCursor.RefreshPointer(cursorWindow);
+        if (hidden && rootTouches.Count == 0 && !gestures.HasActiveContact) Interop.PlaybackCursor.RefreshPointer(cursorWindow);
     }
 
     private void UpdateCursorAutoHide()

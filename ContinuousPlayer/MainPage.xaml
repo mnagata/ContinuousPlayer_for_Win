@@ -4,7 +4,7 @@
     xmlns:vm="using:ContinuousPlayer.ViewModels"
     xmlns:local="using:ContinuousPlayer"
     RequestedTheme="Dark" Loaded="Page_Loaded" SizeChanged="Page_SizeChanged">
-    <Grid x:Name="Root" KeyDown="Root_KeyDown" Background="{ThemeResource CanvasBrush}">
+    <Grid x:Name="Root" Background="{ThemeResource CanvasBrush}">
         <ScrollViewer x:Name="Home" Background="{ThemeResource HomeBrush}" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
             <Grid MinHeight="480">
                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Padding="28,32" MaxWidth="560">
@@ -47,7 +47,7 @@
             <TextBlock x:Name="PortraitInfo" Text="{x:Bind Vm.MediaInfo, Mode=OneWay}" VerticalAlignment="Bottom" Margin="24,0,24,100" TextAlignment="Center" TextWrapping="Wrap" Foreground="{ThemeResource MutedTextBrush}" IsHitTestVisible="False"/>
             <TextBlock Text="{x:Bind Vm.PlaybackStatus, Mode=OneWay}" AutomationProperties.AutomationId="PlaybackStatus" AutomationProperties.LiveSetting="Polite" VerticalAlignment="Bottom" HorizontalAlignment="Center" Margin="24" TextWrapping="Wrap" Foreground="{ThemeResource MainTextBrush}"/>
         </Grid>
-        <Grid x:Name="BrowserOverlay" Visibility="Collapsed" Background="{ThemeResource ScrimBrush}" Padding="24" KeyDown="Browser_KeyDown">
+        <Grid x:Name="BrowserOverlay" Visibility="Collapsed" Background="{ThemeResource ScrimBrush}" Padding="24">
             <Border x:Name="BrowserCard" MaxWidth="880" MaxHeight="800" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" CornerRadius="20" Background="{ThemeResource BrowserBrush}" BorderBrush="{ThemeResource BrowserStrokeBrush}" BorderThickness="1" Padding="20">
                 <Grid RowSpacing="16">
                     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>

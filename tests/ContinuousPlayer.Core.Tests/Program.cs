@@ -22,6 +22,8 @@ try
 {
     foreach (var (name, test) in PlaybackSessionStateTests.Cases())
         await Test(name, () => Check(test));
+    foreach (var (name, test) in PlaybackInputTests.Cases())
+        await Test(name, () => Check(test));
 
     await Test("OP/ED numeric order, mixed case, omitted number", () => Check(() =>
     {

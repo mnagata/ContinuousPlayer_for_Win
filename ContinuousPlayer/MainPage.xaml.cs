@@ -20,6 +20,7 @@ public sealed partial class MainPage : Page
     {
         InitializeComponent();
         InitializeCursorAutoHide();
+        InitializeInput();
     }
 
     private async void Page_Loaded(object sender, RoutedEventArgs e)
@@ -32,6 +33,7 @@ public sealed partial class MainPage : Page
         try
         {
             interruptionMonitor = new(App.Window, PlaybackInterruptionChanged);
+            inputMonitor = new(App.WindowHandle);
             await interruptionMonitor.InitializeAudioAsync();
             if (disposed) return;
         }
@@ -65,10 +67,10 @@ public sealed partial class MainPage : Page
 
     private async void Choose_Click(object sender, RoutedEventArgs e) => await OpenLibraryAsync();
     private void Exit_Click(object sender, RoutedEventArgs e) => App.Window.Close();
-    private void Home_Click(object sender, RoutedEventArgs e) => GoHome();
-    private void Resume_Click(object sender, RoutedEventArgs e) => SetPaused(false);
-    private async void Info_Click(object sender, RoutedEventArgs e) => await ShowInfoAsync();
-    private async void PlaybackFolder_Click(object sender, RoutedEventArgs e) => await ReturnToFolderAsync();
+    private async void Home_Click(object sender, RoutedEventArgs e) => await ExecutePlaybackCommandAsync(PlaybackCommand.Home);
+    private async void Resume_Click(object sender, RoutedEventArgs e) => await ExecutePlaybackCommandAsync(PlaybackCommand.Play);
+    private async void Info_Click(object sender, RoutedEventArgs e) => await ExecutePlaybackCommandAsync(PlaybackCommand.Information);
+    private async void PlaybackFolder_Click(object sender, RoutedEventArgs e) => await ExecutePlaybackCommandAsync(PlaybackCommand.Files);
 
     private void GoHome()
     {
@@ -104,35 +106,40 @@ public sealed partial class MainPage : Page
 
     private async void Root_KeyDown(object sender, KeyRoutedEventArgs e)
     {
-        if (dialogOpen || e.Handled || e.KeyStatus.WasKeyDown) return;
-        if (e.Key == VirtualKey.F11)
+        if (dialogOpen || e.Handled) return;
+        var focused = FocusManager.GetFocusedElement(XamlRoot) as DependencyObject;
+        if (IsTextEntry(focused)) return;
+        if (IsKeyDown(VirtualKey.Control) || IsKeyDown(VirtualKey.LeftWindows) || IsKeyDown(VirtualKey.RightWindows)) return;
+        if (e.Key == VirtualKey.F11 && !IsKeyDown(VirtualKey.Menu))
         {
-            ((MainWindow)App.Window).ToggleFullscreen();
+            e.Handled = true;
+            if (!e.KeyStatus.WasKeyDown) ((MainWindow)App.Window).ToggleFullscreen();
+            return;
+        }
+        if (BrowserOverlay.Visibility == Visibility.Visible)
+        {
+            await HandleBrowserKeyAsync(e, focused);
+            return;
+        }
+        if (IsKeyDown(VirtualKey.Menu)) return;
+        if (e.KeyStatus.WasKeyDown)
+        {
+            if (isPlayback && InputKey(e.Key) != PlaybackInputKey.Other) e.Handled = true;
+            return;
+        }
+        if (!isPlayback) return;
+        var toolbarFocus = IsWithin(focused, PauseToolbar) && userPaused;
+        if (toolbarFocus && e.Key is VirtualKey.Left or VirtualKey.Right or VirtualKey.Up or VirtualKey.Down)
+        {
+            MoveToolbarFocus(e.Key);
             e.Handled = true;
             return;
         }
-        if (BrowserOverlay.Visibility == Visibility.Visible || !isPlayback) return;
-        var focused = FocusManager.GetFocusedElement(XamlRoot) as DependencyObject;
-        var toolbarFocus = IsWithin(focused, PauseToolbar) && userPaused;
-        switch (e.Key)
-        {
-            case VirtualKey.Space:
-                SetPaused(!userPaused); break;
-            case VirtualKey.Enter:
-                if (toolbarFocus) return;
-                SetPaused(!userPaused); break;
-            case VirtualKey.Left:
-            case VirtualKey.Right:
-                await MoveMediaAsync(e.Key == VirtualKey.Left ? -1 : 1); break;
-            case VirtualKey.Up: await SeekAsync(-10); break;
-            case VirtualKey.Down: await SeekAsync(10); break;
-            case VirtualKey.Escape: await ReturnToFolderAsync(); break;
-            case VirtualKey.I: await ShowInfoAsync(); break;
-            case VirtualKey.O: await ReturnToFolderAsync(); break;
-            case VirtualKey.H: GoHome(); break;
-            default: return;
-        }
+        var command = PlaybackInput.Resolve(InputKey(e.Key), IsWithin(focused, TouchSurface)
+            ? PlaybackInputTarget.Surface : PlaybackInputTarget.Control, IsKeyDown(VirtualKey.Shift));
+        if (command == PlaybackCommand.None) return;
         e.Handled = true;
+        await ExecutePlaybackCommandAsync(command);
     }
 
     private static bool IsWithin(DependencyObject? node, DependencyObject parent)
@@ -156,6 +163,8 @@ public sealed partial class MainPage : Page
         StopPlayback();
         interruptionMonitor?.Dispose();
         interruptionMonitor = null;
+        inputMonitor?.Dispose();
+        inputMonitor = null;
         DisposeCursorAutoHide();
         dlna.Dispose();
     }

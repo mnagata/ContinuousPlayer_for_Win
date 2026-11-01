@@ -65,7 +65,7 @@ try {
     $initial = Inspect
     if ($initial.automationId -contains 'PlayerHome') { UI @('invoke','PlayerHome') | Out-Null }
     elseif ($initial.automationId -contains 'BrowserCancel') { UI @('invoke','BrowserCancel') | Out-Null }
-    Case 'Home controls and screenshot' { Wait 'ChooseFolder'; Wait 'ExitHome'; Capture '01-home' }
+    Case 'Home controls and screenshot' { Wait 'ChooseFolder'; Wait 'ExitHome'; UI @('focus','ChooseFolder'); Capture '01-home' }
     Case 'Folder browser opens without launching a picker' {
         UI @('invoke','ChooseFolder'); Wait 'BrowserList'
         UI @('wait-for','ChooseFolder','-p','IsEnabled','--value','False','-t','2000')
@@ -96,7 +96,10 @@ try {
         Start-Sleep -Milliseconds 800
         UI @('send-keys','space','--via','send-input'); Wait 'Resume'; Capture '06-paused'
     }
-    Case 'Right key selects ED while paused' {
+    Case 'Toolbar arrows move focus; surface arrows select files while paused' {
+        UI @('send-keys','right','--via','send-input')
+        UI @('wait-for','PlaybackInfo','-p','HasKeyboardFocus','--value','True','-t','3000')
+        UI @('focus','TouchSurface')
         UI @('send-keys','right','--via','send-input'); Wait 'Sample ED.wav'; Wait 'Resume'
     }
     Case 'Touch swipes move next and previous while paused' {
@@ -105,12 +108,13 @@ try {
     }
     Case 'Center touch resumes and pauses' {
         UI @('touch','VideoPlayer','-g','tap'); UI @('wait-for','Resume','--gone','-t','3000')
+        Start-Sleep -Milliseconds 1000 # Deliberate separate taps, outside the double-tap window.
         UI @('touch','VideoPlayer','-g','tap'); Wait 'Resume'
     }
     Case 'Right-zone taps seek and advance at the end' {
         $player = Inspect | Where-Object { $_.automationId -eq 'VideoPlayer' } | Select-Object -First 1
         $point = '{0},{1}' -f [int]($player.x + $player.width * .85), [int]($player.y + $player.height * .5)
-        for ($i=0; $i -lt 5; $i++) { UI @('touch','--at',$point,'-g','tap') }
+        for ($i=0; $i -lt 5; $i++) { UI @('touch','--at',$point,'-g','tap'); Start-Sleep -Milliseconds 1000 }
         Wait 'Sample OP2.wav'; Wait 'Resume'
     }
     Case 'Keyboard toolbar navigation and media information' {

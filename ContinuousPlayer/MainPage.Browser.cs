@@ -271,17 +271,42 @@ public sealed partial class MainPage
     private async void Refresh_Click(object sender, RoutedEventArgs e) => await NavigateAsync(location, false, (BrowserList.SelectedItem as BrowserRow)?.Id);
     private async void Retry_Click(object sender, RoutedEventArgs e) { if (!browserBusy && retry != null) await retry(); }
 
-    private async void Browser_KeyDown(object sender, KeyRoutedEventArgs e)
+    private async Task HandleBrowserKeyAsync(KeyRoutedEventArgs e, DependencyObject? focused)
     {
-        if (dialogOpen || e.KeyStatus.WasKeyDown) return;
+        if (dialogOpen || e.Handled) return;
+        var alt = IsKeyDown(VirtualKey.Menu);
+        if (alt && e.Key != VirtualKey.Left) return;
+        var listFocus = IsWithin(focused, BrowserList);
+        if (!alt && !listFocus && e.Key is VirtualKey.Left or VirtualKey.Right or VirtualKey.Up or VirtualKey.Down)
+        {
+            var direction = e.Key switch
+            {
+                VirtualKey.Left => FocusNavigationDirection.Left, VirtualKey.Right => FocusNavigationDirection.Right,
+                VirtualKey.Up => FocusNavigationDirection.Up, _ => FocusNavigationDirection.Down
+            };
+            FocusManager.TryMoveFocus(direction, new FindNextElementOptions { SearchRoot = BrowserOverlay });
+            e.Handled = true;
+            return;
+        }
+        if (e.Key is VirtualKey.PageDown or VirtualKey.PageUp && !listFocus) return;
+        if (e.Key is not (VirtualKey.Escape or VirtualKey.GoBack or VirtualKey.Back or VirtualKey.Left or
+            VirtualKey.Right or VirtualKey.PageDown or VirtualKey.PageUp or VirtualKey.F5 or VirtualKey.Delete)) return;
+        e.Handled = true; // Consume before any asynchronous navigation/dialog work.
         switch (e.Key)
         {
             case VirtualKey.Escape: CloseBrowser(); break;
             case VirtualKey.GoBack:
             case VirtualKey.Back: await BackAsync(); break;
             case VirtualKey.Left:
-                if (!Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Menu).HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down)) return;
-                await BackAsync(); break;
+                if (alt) await BackAsync();
+                else if (IsWithin(focused, BrowserList)) PageBrowser(-1);
+                else return;
+                break;
+            case VirtualKey.Right:
+            case VirtualKey.PageDown:
+            case VirtualKey.PageUp:
+                if (!IsWithin(focused, BrowserList)) return;
+                PageBrowser(e.Key == VirtualKey.PageUp ? -1 : 1); break;
             case VirtualKey.F5:
                 if (!browserBusy) await NavigateAsync(location, false, (BrowserList.SelectedItem as BrowserRow)?.Id); break;
             case VirtualKey.Delete: await RemoveSelectedAsync(); break;

@@ -25,6 +25,7 @@ try{
     $appPid=[int]$launch.ProcessId
     if(!$appPid){throw 'No local test process.'}
     Wait 'ChooseFolder';UI @('wait-for','ChooseFolder','-p','IsEnabled','--value','True','-t','10000') | Out-Null
+    UI @('focus','ChooseFolder') | Out-Null
     UI @('invoke','ChooseFolder') | Out-Null;UI @('click','フォルダーを追加') | Out-Null
     Wait 'PC / ローカルフォルダー';UI @('click','PC / ローカルフォルダー') | Out-Null
     $picker=$null

@@ -26,9 +26,6 @@ public sealed partial class MainPage
         playbackState.Phase is PlaybackPhase.Ended or PlaybackPhase.Failed;
     private bool startingPlayback;
     private int mediaRequest;
-    private Windows.Foundation.Point? pointerStart;
-    private long pointerTime;
-    private uint? activePointer;
 
     private async Task StartPlaybackAsync(MediaFile selected)
     {
@@ -203,20 +200,32 @@ public sealed partial class MainPage
             await ShowPlaybackErrorAsync($"{args.Error}\n{args.ErrorMessage}", args.ExtendedErrorCode?.HResult ?? 0);
     });
 
-    private void Transport_ButtonPressed(SystemMediaTransportControls sender, SystemMediaTransportControlsButtonPressedEventArgs args) => DispatcherQueue.TryEnqueue(async () =>
+    private void Transport_ButtonPressed(SystemMediaTransportControls sender, SystemMediaTransportControlsButtonPressedEventArgs args)
     {
-        if (mediaPlayer == null || !PlaybackInputAllowed || sender != mediaPlayer.SystemMediaTransportControls) return;
-        switch (args.Button)
+        var command = args.Button switch
         {
-            case SystemMediaTransportControlsButton.Play: SetPaused(false); break;
-            case SystemMediaTransportControlsButton.Pause: SetPaused(true); break;
-            case SystemMediaTransportControlsButton.Previous: await MoveMediaAsync(-1); break;
-            case SystemMediaTransportControlsButton.Next: await MoveMediaAsync(1); break;
-            case SystemMediaTransportControlsButton.Rewind: await SeekAsync(-10); break;
-            case SystemMediaTransportControlsButton.FastForward: await SeekAsync(10); break;
-            case SystemMediaTransportControlsButton.Stop: SetPaused(true); break;
-        }
-    });
+            SystemMediaTransportControlsButton.Play => PlaybackCommand.Play,
+            SystemMediaTransportControlsButton.Pause or SystemMediaTransportControlsButton.Stop => PlaybackCommand.Pause,
+            SystemMediaTransportControlsButton.Previous => PlaybackCommand.Previous,
+            SystemMediaTransportControlsButton.Next => PlaybackCommand.Next,
+            SystemMediaTransportControlsButton.Rewind => PlaybackCommand.SeekBackward,
+            SystemMediaTransportControlsButton.FastForward => PlaybackCommand.SeekForward,
+            _ => PlaybackCommand.None
+        };
+        var key = args.Button switch
+        {
+            SystemMediaTransportControlsButton.Next => 0xB0, SystemMediaTransportControlsButton.Previous => 0xB1,
+            SystemMediaTransportControlsButton.Stop => 0xB2,
+            SystemMediaTransportControlsButton.Play or SystemMediaTransportControlsButton.Pause => 0xB3, _ => 0
+        };
+        // Capture acceptance before dispatching, while the physical key is still held.
+        if (key != 0 && inputMonitor?.TryAcceptMediaKey(key) == false) return;
+        DispatcherQueue.TryEnqueue(async () =>
+        {
+            if (mediaPlayer == null || sender != mediaPlayer.SystemMediaTransportControls) return;
+            await ExecutePlaybackCommandAsync(command);
+        });
+    }
 
     private void SetPaused(bool paused, bool focus = true)
     {
@@ -289,6 +298,7 @@ public sealed partial class MainPage
     private async Task ShowInfoAsync()
     {
         if (!PlaybackInputAllowed || mediaPlayer == null) return;
+        gestures.Reset();
         var saved = playbackState.Suspend(mediaPlayer.PlaybackSession.Position);
         ApplyPlaybackState();
         var output = mediaPlayer.AudioDevice?.Name ?? "Windows既定の再生デバイス";
@@ -318,6 +328,7 @@ public sealed partial class MainPage
     private async Task ReturnToFolderAsync()
     {
         if (!PlaybackInputAllowed || mediaPlayer == null) return;
+        gestures.Reset();
         var target = playbackLocation;
         var selected = queue.Current?.Id;
         browserSuspension = playbackState.Suspend(mediaPlayer.PlaybackSession.Position);
@@ -331,6 +342,7 @@ public sealed partial class MainPage
 
     private void StopPlayback()
     {
+        gestures.Reset();
         mediaRequest++;
         playbackState.Stop();
         browserSuspension = null;
@@ -372,34 +384,29 @@ public sealed partial class MainPage
 
     private void Surface_Pressed(object sender, PointerRoutedEventArgs e)
     {
-        if (activePointer != null || !e.GetCurrentPoint(TouchSurface).Properties.IsLeftButtonPressed) return;
-        activePointer = e.Pointer.PointerId;
-        pointerStart = e.GetCurrentPoint(TouchSurface).Position;
-        pointerTime = Stopwatch.GetTimestamp();
-        TouchSurface.CapturePointer(e.Pointer);
+        if (!PlaybackInputAllowed) return;
+        var point = e.GetCurrentPoint(TouchSurface);
+        if (!point.Properties.IsLeftButtonPressed) return;
+        var kind = e.Pointer.PointerDeviceType switch
+        {
+            Microsoft.UI.Input.PointerDeviceType.Touch => PlaybackPointerKind.Touch,
+            Microsoft.UI.Input.PointerDeviceType.Pen => PlaybackPointerKind.Pen, _ => PlaybackPointerKind.Mouse
+        };
+        gestures.MouseTapDistance = Math.Max(2, Interop.PlaybackInputMonitor.DoubleClickWidth / (XamlRoot?.RasterizationScale ?? 1));
+        gestures.Press(e.Pointer.PointerId, kind, point.Position.X, point.Position.Y, TouchSurface.ActualWidth);
+        if (kind == PlaybackPointerKind.Touch && rootTouches.Any(x => x != e.Pointer.PointerId)) gestures.Invalidate();
+        if (!TouchSurface.CapturePointer(e.Pointer)) gestures.Cancel(e.Pointer.PointerId);
         e.Handled = true;
     }
 
     private async void Surface_Released(object sender, PointerRoutedEventArgs e)
     {
-        if (activePointer != e.Pointer.PointerId || pointerStart is not { } start) return;
         var point = e.GetCurrentPoint(TouchSurface).Position;
-        var seconds = Stopwatch.GetElapsedTime(pointerTime).TotalSeconds;
-        pointerStart = null;
-        activePointer = null;
+        var command = gestures.Release(e.Pointer.PointerId, point.X, point.Y, Environment.TickCount64);
         TouchSurface.ReleasePointerCapture(e.Pointer);
         e.Handled = true;
-        var dx = point.X - start.X;
-        var dy = point.Y - start.Y;
-        if (Math.Abs(dx) > 100 && Math.Abs(dx) > Math.Abs(dy) && Math.Abs(dx) / Math.Max(.001, seconds) > 100)
-            await MoveMediaAsync(dx < 0 ? 1 : -1);
-        else if (Math.Abs(dx) < 24 && Math.Abs(dy) < 24)
-        {
-            if (point.X < TouchSurface.ActualWidth / 3) await SeekAsync(-10);
-            else if (point.X > TouchSurface.ActualWidth * 2 / 3) await SeekAsync(10);
-            else SetPaused(!userPaused);
-        }
+        await ExecutePlaybackCommandAsync(command);
     }
 
-    private void Surface_Canceled(object sender, PointerRoutedEventArgs e) { pointerStart = null; activePointer = null; }
+    private void Surface_Canceled(object sender, PointerRoutedEventArgs e) => gestures.Cancel(e.Pointer.PointerId);
 }
