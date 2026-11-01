@@ -5,7 +5,7 @@ namespace ContinuousPlayer.Core;
 
 public record MediaFile(string Id, string Name, string Location, long Size = -1, string? MimeType = null);
 public record FolderNode(string Id, string Name);
-public record SavedFolder(string Kind, string Name, string Path, string? ServerId = null, string? ServerName = null, List<FolderNode>? Trail = null)
+public record SavedFolder(string Kind, string Name, string Path, string? ServerId = null, string? ServerName = null, List<FolderNode>? Trail = null, string? DescriptionUrl = null)
 {
     public string Key => Kind == "dlna" ? $"dlna:{ServerId}:{Path}" : $"local:{Path.ToUpperInvariant()}";
 }

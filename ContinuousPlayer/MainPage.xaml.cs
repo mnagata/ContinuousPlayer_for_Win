@@ -165,6 +165,8 @@ public sealed partial class MainPage : Page
         disposed = true;
         App.Window.Activated -= Window_Activated;
         activeInfoDialog?.Hide();
+        activeConnectionDialog?.Hide();
+        activeErrorDialog?.Hide();
         CloseBrowser(BrowserCloseReason.WindowClosed);
         browserCancellation?.Cancel();
         StopPlayback();

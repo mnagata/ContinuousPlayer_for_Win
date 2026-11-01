@@ -18,6 +18,11 @@ public sealed class PlaybackQueue
         Index = next;
         return true;
     }
+    public void RefreshCurrent(MediaFile refreshed)
+    {
+        if (Current?.Id != refreshed.Id) throw new InvalidOperationException("The refreshed media must have the current file ID.");
+        var items = Items.ToArray(); items[Index] = refreshed; Items = items;
+    }
     public (TimeSpan Position, bool Next) Seek(TimeSpan current, TimeSpan duration, int seconds)
     {
         var target = current + TimeSpan.FromSeconds(seconds);

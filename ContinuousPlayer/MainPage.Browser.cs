@@ -36,6 +36,10 @@ public sealed partial class MainPage
     {
         if (browserBusy || disposed) return;
         var request = browserRequests.Begin();
+        manualConnectTarget = target.Kind == "servers" ? target : null;
+        ManualConnectButton.Visibility = target.Kind == "servers" ? Visibility.Visible : Visibility.Collapsed;
+        ReconnectButton.Visibility = Visibility.Collapsed;
+        failedDlnaTarget = null;
         browserCancellation?.Dispose();
         browserCancellation = new CancellationTokenSource();
         var token = browserCancellation.Token;
@@ -73,11 +77,18 @@ public sealed partial class MainPage
                 case "dlna":
                     if (target.Server == null && target.Saved != null)
                     {
-                        var server = (await dlna.DiscoverAsync(token)).FirstOrDefault(x => x.Id == target.Saved.ServerId)
-                            ?? throw new IOException("登録先のサーバーが見つかりません。接続を確認して再試行してください。");
+                        var server = await dlna.ReconnectAsync(target.Saved, token);
                         target = target with { Server = server };
                     }
                     var entries = await dlna.BrowseAsync(target.Server ?? throw new IOException("サーバーが未選択です。"), target.Path, token);
+                    if (target.Saved != null && target.Server.DescriptionUri is { } description && target.Saved.DescriptionUrl != description.AbsoluteUri)
+                    {
+                        token.ThrowIfCancellationRequested();
+                        if (!browserRequests.IsCurrent(request) || disposed) return;
+                        library.UpdateServerEndpoint(target.Server.Id, description);
+                        if (!await SaveBrowserLibraryAsync(request)) return;
+                        target = target with { Saved = target.Saved with { DescriptionUrl = description.AbsoluteUri } };
+                    }
                     rows.AddRange(MediaCatalog.SortFolders(entries.Where(x => x.Media == null), x => x.Name)
                         .Select(x => new BrowserRow { Kind = "folder", Id = x.Id, Name = x.Name }));
                     if (!target.Register) rows.AddRange(MediaCatalog.SortMedia(entries.Where(x => x.Media != null).Select(x => x.Media!))
@@ -92,11 +103,12 @@ public sealed partial class MainPage
             Vm.BrowserTitle = target.Name;
             Vm.Rows.Clear();
             foreach (var row in PrepareDisplayRows(rows)) Vm.Rows.Add(row);
-            Vm.EmptyMessage = rows.Count == 0 ? target.Kind == "servers" ? "メディアサーバーが見つかりません。\n同じLANへの接続とNASのメディアサーバー設定を確認してください。"
+            Vm.EmptyMessage = rows.Count == 0 ? target.Kind == "servers" ? "メディアサーバーが見つかりません。\n同じLANへの接続とNASの設定を確認するか、「アドレスを指定して接続」を使用してください。"
                 : target.Kind == "drives" ? "利用できるドライブはありません。"
                 : target.Register ? "子フォルダーはありません。このフォルダーを登録できます。" : "このフォルダーに対応メディアはありません。" : "";
             RegisterButton.Visibility = target.Register && target.Kind is "local" or "dlna" ? Visibility.Visible : Visibility.Collapsed;
-            BrowserHint.Text = target.Kind == "sources" ? "連続再生するフォルダーを登録します。PCの選択ではWindowsのフォルダー選択画面を開きます。" : target.Register
+            BrowserHint.Text = target.Kind == "servers" ? "サーバーを選ぶか、「アドレスを指定して接続」から接続してください。"
+                : target.Kind == "sources" ? "連続再生するフォルダーを登録します。PCの選択ではWindowsのフォルダー選択画面を開きます。" : target.Register
                 ? "登録するフォルダーを開き、「このフォルダーを登録」を押してください。登録だけでは再生しません。"
                 : target.Kind == "library" ? "フォルダーを開くとファイルを選べます。登録解除は行の右クリック・長押し・Deleteで行います。"
                 : "ファイルを選ぶと、その位置から同じフォルダーを連続再生します。";
@@ -110,9 +122,17 @@ public sealed partial class MainPage
             SelectRow(selected ?? LastSelection(target));
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested) { }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or HttpRequestException or System.Xml.XmlException or OperationCanceledException or System.Net.Sockets.SocketException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or HttpRequestException or System.Xml.XmlException or FormatException or OperationCanceledException or System.Net.Sockets.SocketException)
         {
-            if (browserRequests.IsCurrent(request) && !disposed) ShowBrowserError(ex is OperationCanceledException ? "接続がタイムアウトしました。" : ex.Message);
+            if (browserRequests.IsCurrent(request) && !disposed)
+            {
+                ShowBrowserError((target.Kind is "servers" or "dlna" ? FailureGuidance.Connection(ex) + "\n" : "") + ex.Message);
+                if (target.Kind == "dlna" && target.Saved != null)
+                {
+                    failedDlnaTarget = target;
+                    ReconnectButton.Visibility = Visibility.Visible;
+                }
+            }
         }
         finally
         {
@@ -244,7 +264,7 @@ public sealed partial class MainPage
         var request = browserRequests.Begin();
         SetBrowserBusy(true);
         var folder = location.Kind == "dlna"
-            ? new SavedFolder("dlna", location.Name, location.Path, location.Server!.Id, location.Server.Name, location.Trail?.ToList())
+            ? new SavedFolder("dlna", location.Name, location.Path, location.Server!.Id, location.Server.Name, location.Trail?.ToList(), location.Server.DescriptionUri?.AbsoluteUri)
             : new SavedFolder("local", location.Name, System.IO.Path.GetFullPath(location.Path));
         library.Register(folder);
         var saved = await SaveBrowserLibraryAsync(request);

@@ -26,6 +26,8 @@ try{
     $appPid=[int]$launch.ProcessId
     if(!$appPid){throw 'No local test process.'}
     Wait 'ChooseFolder';UI @('wait-for','ChooseFolder','-p','IsEnabled','--value','True','-t','10000') | Out-Null
+    $main=@(UI @('list-windows','--json') | ConvertFrom-Json) | Where-Object {$_.processId -eq $appPid -and $_.ownerHwnd -eq 0 -and $_.className -eq 'WinUIDesktopWin32WindowClass'} | Select-Object -First 1
+    $mainHwnd=[string]$main.hwnd;if(!$mainHwnd){throw 'No main window.'}
     UI @('focus','ChooseFolder') | Out-Null
     UI @('invoke','ChooseFolder') | Out-Null;UI @('click','フォルダーを追加') | Out-Null
     Wait 'PC / ローカルフォルダー';UI @('click','PC / ローカルフォルダー') | Out-Null
@@ -55,7 +57,8 @@ try{
     $info=UI @('get-value','MediaInfoText','--json') | ConvertFrom-Json
     if(([string]$info.text -split "`n")[0] -ne 'Sample ED.wav'){throw 'Natural progression selected the wrong file.'}
     $screenshot=Join-Path $artifacts 'natural-next.png'
-    UI @('screenshot','--output',$screenshot,'--json') | Out-Null
+    Start-Sleep -Seconds 1
+    UI @('screenshot','--capture-screen','--output',$screenshot,'--json') -Window $mainHwnd | Out-Null
     if(!(Test-Path -LiteralPath $screenshot)){throw 'Screenshot missing.'}
     UI @('send-keys','i','--via','send-input') | Out-Null
     UI @('wait-for','MediaInfoText','--gone','-t','3000') | Out-Null
@@ -74,7 +77,8 @@ try{
     $replay=UI @('get-value','MediaInfoText','--json') | ConvertFrom-Json
     if($replay.text -notmatch '再生位置: 00:00:0[0-4]'){throw 'Explicit replay did not restart at zero.'}
     $replayScreenshot=Join-Path $artifacts 'final-replay.png'
-    UI @('screenshot','--output',$replayScreenshot,'--json') | Out-Null
+    Start-Sleep -Seconds 1
+    UI @('screenshot','--capture-screen','--output',$replayScreenshot,'--json') -Window $mainHwnd | Out-Null
     UI @('send-keys','i','--via','send-input') | Out-Null
     UI @('wait-for','MediaInfoText','--gone','-t','3000') | Out-Null
     UI @('send-keys','h','--via','send-input') | Out-Null;Wait 'ChooseFolder'

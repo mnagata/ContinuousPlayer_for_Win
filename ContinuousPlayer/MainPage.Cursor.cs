@@ -66,7 +66,9 @@ public sealed partial class MainPage
     private void CursorIdleTimer_Tick(object? sender, object e)
     {
         if (!isPlayback || disposed) { UpdateCursorAutoHide(); return; }
-        if (ForwardButton.IsEnabled != (PlaybackInputAllowed && mediaPlayer?.PlaybackSession.CanSeek == true))
+        RecordConfirmedPosition();
+        CheckPlaybackProgress();
+        if (ForwardButton.IsEnabled != (PlaybackInputAllowed && CanSeekCurrent))
             UpdatePlaybackButtons();
         if (!CanHidePlaybackCursor) { ShowPlaybackChrome(); return; }
         if (!PointerIsOverPlayback() || !GetCursorPos(out var point))

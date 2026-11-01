@@ -64,9 +64,9 @@ public sealed partial class MainPage
         foreach (var button in PlaybackButtons) button.IsEnabled = allowed;
         PreviousButton.IsEnabled = allowed && queue.Index > 0;
         NextButton.IsEnabled = allowed && queue.Index + 1 < queue.Items.Count;
-        RewindButton.IsEnabled = ForwardButton.IsEnabled = allowed && mediaPlayer?.PlaybackSession.CanSeek == true;
-        ResumeButton.IsEnabled = allowed && playbackState.Phase != PlaybackPhase.Failed;
-        var label = userPaused ? "再生" : "一時停止";
+        RewindButton.IsEnabled = ForwardButton.IsEnabled = allowed && CanSeekCurrent;
+        ResumeButton.IsEnabled = allowed;
+        var label = playbackState.Phase == PlaybackPhase.Failed ? "再試行" : userPaused ? "再生" : "一時停止";
         AutomationProperties.SetName(ResumeButton, label);
         ToolTipService.SetToolTip(ResumeButton, label);
         PlayPauseIcon.Glyph = userPaused ? "\uE768" : "\uE769";

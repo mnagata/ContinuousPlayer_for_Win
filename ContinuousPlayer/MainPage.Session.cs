@@ -73,8 +73,8 @@ public sealed partial class MainPage
 
     private async Task ShowPendingFailureAsync()
     {
-        if (disposed || !isPlayback || dialogOpen || BrowserOverlay.Visibility == Visibility.Visible || pendingFailure is not { } failure) return;
+        if (disposed || !isPlayback || dialogOpen || BrowserOverlay.Visibility == Visibility.Visible || pendingFailure == null) return;
         pendingFailure = null;
-        await ShowPlaybackErrorAsync(failure.Message, failure.Code);
+        await ShowFailureDialogAsync();
     }
 }

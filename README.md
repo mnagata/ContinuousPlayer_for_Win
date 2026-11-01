@@ -5,13 +5,13 @@ Android版の仕様・Kotlinコード・デザイン資産をもとにした、W
 ## 機能
 
 - PC・USBのフォルダーを登録し、独自ブラウザーからファイルを選択
-- 同一LAN上のNAS / DLNAサーバーをSSDPで探索し、公開フォルダーを閲覧・登録
+- NAS / DLNAサーバーをSSDP探索またはアドレス指定で接続し、公開フォルダーを閲覧・登録
 - 選択したファイルから同じフォルダー直下を連続再生（末尾で終了、リピートなし）
 - `作品 OP → ED → OP2 → ED2` の整列、季節フォルダーの年・冬春夏秋順
 - タッチの左右・中央タップ、横スワイプ、キーボード、Windowsメディアキー
 - 再生元フォルダーへの復帰、現在のファイルへのフォーカス復元、一覧取消時の位置・再生状態の復元
 - フォルダー登録と最後の選択位置の保存、オフラインでの登録解除
-- 再生エラーの表示・再試行、メディア情報、全画面再生
+- 再生エラーの原因案内・確認済み位置からの再試行、メディア情報、全画面再生
 
 列挙する形式: `.mp4 .m4v .mp3 .flac .m4a .aac .wav .ogg .opus`。`._`で始まるAppleDoubleファイルは除外します。デコードできる形式はWindowsのコーデック構成にも依存します。
 
@@ -70,6 +70,7 @@ dotnet run --project .\tests\ContinuousPlayer.Core.Tests
 .\scripts\Test-Stage2.ps1   # ページ移動、フォーカス、マウス/タッチ、キー長押し
 .\scripts\Test-Stage3.ps1   # 上下操作部、全画面、サイズ変更、動画の表示制御
 .\scripts\Test-Stage4.ps1   # 境界、追加・登録・解除、表示名、制御DLNAの遅延取消
+.\scripts\Test-Stage5.ps1   # 手入力接続・再指定・再起動、通信断と位置復旧（制御HTTP）
 # カーソル検証: 60秒以上の動画1本のみを置いた専用フォルダーと、起動中アプリのPIDを指定
 .\scripts\Test-Cursor.ps1 -AppPid 1234 -VideoPath C:\TestVideo\sample.mp4
 ```
@@ -82,6 +83,8 @@ dotnet run --project .\tests\ContinuousPlayer.Core.Tests
 
 再生にはWinUIの`MediaPlayerElement`とWindows `MediaPlayer`を使用します。AndroidのSAFはWindowsのフォルダーピッカーへ置き換えています。USBはOSにマウントされたドライブが対象です。AndroidのUSB Preferred Mixer Attributesに相当するビットパーフェクト設定、WASAPI排他出力、Android TV固有APIは実装していません。音声はWindows標準ミキサー経由です。再生位置・プレイリストのプロセス終了後の復元、バックグラウンド再生サービスも対象外です。
 
-DLNAは公開されたContentDirectoryを読み取ります。NASのログイン、SMB、DTCP-IP、キャストには対応しません。保存にはサーバーIDとフォルダーIDを使い、再接続時にURLを取得し直します。
+DLNAは公開されたContentDirectoryを読み取ります。NASのログイン、SMB、DTCP-IP、キャストには対応しません。ホスト名・IP（ポート指定可）またはHTTP/HTTPSのデバイス記述URLで接続できます。パス省略時は `/desc/device.xml`、その場合ポートも省略すると50001を使います。保存にはサーバーID・フォルダーID・記述URLを使い、メディアURLは再取得します。接続できない登録は「接続先を再指定」から同じNASの新しいアドレスへ変更できます。
+
+再生失敗では自動で次へ進まず、再試行・次のファイル（次がある場合）・ファイル一覧・閉じるを選べます。再試行は同じファイルの確認済み位置を復元してから再開し、準備中に割り込みがあれば手動再開を待ちます。位置を復元できない場合はその旨を表示します。閉じるだけでは停止状態を保ちます。
 
 詳細は[Windows版仕様書](docs/spec.md)を参照してください。再生APIは[MicrosoftのMediaPlayer資料](https://learn.microsoft.com/en-us/windows/apps/develop/media-playback/play-audio-and-video-with-mediaplayer)に基づいています。

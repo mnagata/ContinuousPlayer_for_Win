@@ -3,7 +3,7 @@ using System.Xml.Linq;
 
 namespace ContinuousPlayer.Core;
 
-public record DlnaServer(string Id, string Name, Uri ControlUrl, string ServiceType);
+public record DlnaServer(string Id, string Name, Uri ControlUrl, string ServiceType, Uri? DescriptionUri = null);
 public record DlnaEntry(string Id, string Name, MediaFile? Media = null);
 public record DlnaPage(List<DlnaEntry> Entries, int Returned, int Total);
 
@@ -29,8 +29,10 @@ public static class DlnaProtocol
             var service = device.Elements().FirstOrDefault(x => x.Name.LocalName == "serviceList")?.Elements()
                 .FirstOrDefault(x => Child(x, "serviceType").StartsWith("urn:schemas-upnp-org:service:ContentDirectory:", StringComparison.Ordinal));
             if (service == null || string.IsNullOrWhiteSpace(Child(service, "controlURL"))) continue;
+            var control = Resolve(origin, Child(service, "controlURL"));
+            if (!DlnaAddress.IsHttpTarget(control)) throw new InvalidDataException("DLNAの制御先URLが不正です。");
             return new DlnaServer(Nonempty(Child(device, "UDN"), location.ToString()), Nonempty(Child(device, "friendlyName"), location.Host),
-                Resolve(origin, Child(service, "controlURL")), Child(service, "serviceType"));
+                control, Child(service, "serviceType"), location);
         }
         throw new InvalidDataException("ContentDirectoryサービスが見つかりません。");
     }

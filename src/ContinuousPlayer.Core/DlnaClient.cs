@@ -8,6 +8,22 @@ namespace ContinuousPlayer.Core;
 public sealed class DlnaClient : IDisposable
 {
     private readonly HttpClient http = new(new SocketsHttpHandler { ConnectTimeout = TimeSpan.FromSeconds(5), AllowAutoRedirect = false }) { Timeout = TimeSpan.FromSeconds(8) };
+    public async Task<DlnaServer> ConnectAsync(Uri description, CancellationToken cancellation)
+    {
+        if (!DlnaAddress.IsHttpTarget(description)) throw new FormatException("デバイス記述URLが不正です。");
+        using var request = new HttpRequestMessage(HttpMethod.Get, description);
+        return DlnaProtocol.Server(await ReadAsync(request, cancellation), description);
+    }
+
+    public async Task<DlnaServer> ReconnectAsync(SavedFolder saved, CancellationToken cancellation)
+    {
+        var server = saved.DescriptionUrl is { Length: > 0 } address && Uri.TryCreate(address, UriKind.Absolute, out var uri)
+            ? await ConnectAsync(uri, cancellation)
+            : (await DiscoverAsync(cancellation)).FirstOrDefault(x => x.Id == saved.ServerId)
+                ?? throw new IOException("登録先を探索できません。接続先のアドレスを再指定してください。");
+        if (server.Id != saved.ServerId) throw new IOException("接続先のサーバーIDが登録先と異なります。元のNASを指定するか、別のフォルダーとして追加してください。");
+        return server;
+    }
     public async Task<List<DlnaServer>> DiscoverAsync(CancellationToken cancellation)
     {
         using var udp = new UdpClient(AddressFamily.InterNetwork);
@@ -48,11 +64,10 @@ public sealed class DlnaClient : IDisposable
             cancellation.ThrowIfCancellationRequested();
             try
             {
-                using var requestMessage = new HttpRequestMessage(HttpMethod.Get, location);
-                var server = DlnaProtocol.Server(await ReadAsync(requestMessage, cancellation), new Uri(location));
+                var server = await ConnectAsync(new Uri(location), cancellation);
                 if (servers.All(x => x.Id != server.Id)) servers.Add(server);
             }
-            catch (Exception ex) when (ex is HttpRequestException or IOException or System.Xml.XmlException or UriFormatException) { Debug.WriteLine(ex); }
+            catch (Exception ex) when (ex is HttpRequestException or IOException or System.Xml.XmlException or FormatException) { Debug.WriteLine(ex); }
             catch (OperationCanceledException) when (!cancellation.IsCancellationRequested) { }
         }
         return servers.OrderBy(x => x.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
