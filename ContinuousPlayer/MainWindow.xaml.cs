@@ -19,6 +19,7 @@ public sealed partial class MainWindow : Window
 {
     private readonly AccessibilitySettings accessibility = new();
     private readonly UISettings themeSettings = new();
+    private bool initialWindowSizeApplied;
     public MainWindow()
     {
         InitializeComponent();
@@ -31,7 +32,8 @@ public sealed partial class MainWindow : Window
 
         AppWindow.SetIcon("Assets/AppIcon.ico");
         var scale = GetDpiForWindow(WinRT.Interop.WindowNative.GetWindowHandle(this)) / 96.0;
-        AppWindow.Resize(new SizeInt32((int)(1000 * scale), (int)(740 * scale)));
+        // Include the title bar; native frame insets are corrected after the first layout.
+        AppWindow.Resize(new SizeInt32((int)(1024 * scale), (int)((576 + AppTitleBar.Height) * scale)));
         if (AppWindow.Presenter is OverlappedPresenter presenter)
         {
             presenter.PreferredMinimumWidth = (int)(440 * scale);
@@ -41,6 +43,28 @@ public sealed partial class MainWindow : Window
     }
 
     public void ShowMainPage() => RootFrame.Navigate(typeof(MainPage));
+
+    private void WindowLayout_Loaded(object sender, RoutedEventArgs e)
+    {
+        if (initialWindowSizeApplied || RootFrame.ActualWidth <= 0 || RootFrame.ActualHeight <= 0) return;
+        initialWindowSizeApplied = true;
+        var scale = GetDpiForWindow(WinRT.Interop.WindowNative.GetWindowHandle(this)) / 96.0;
+        var size = AppWindow.Size;
+        // Measure the page below the title bar so custom-caption and DPI insets are counted once.
+        AppWindow.Resize(new SizeInt32(
+            size.Width + (int)Math.Round((1024 - RootFrame.ActualWidth) * scale),
+            size.Height + (int)Math.Round((576 - RootFrame.ActualHeight) * scale)));
+    }
+
+    public void SetPlaybackTitleBar(UIElement toolbar, bool visible, string title, string status, string? fullName = null)
+    {
+        if (!ReferenceEquals(PlaybackTitleBarActions.Content, toolbar)) PlaybackTitleBarActions.Content = toolbar;
+        toolbar.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+        AppTitleBar.Title = visible ? title : "ContinuousPlayer";
+        AppTitleBar.Subtitle = visible ? status : "";
+        Microsoft.UI.Xaml.Controls.ToolTipService.SetToolTip(AppTitleBar, visible ? fullName ?? title : null);
+        if (visible) AppTitleBar.RecomputeDragRegions();
+    }
 
     private void ThemeSettings_ColorValuesChanged(UISettings sender, object args) => DispatcherQueue.TryEnqueue(UpdateCaptionColors);
 

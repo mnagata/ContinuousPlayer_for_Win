@@ -36,8 +36,9 @@ public sealed partial class MainPage
         UpdateCursorAutoHide();
         if (focus && !dialogOpen && BrowserOverlay.Visibility != Visibility.Visible)
         {
-            if (userPaused) ResumeButton.Focus(FocusState.Programmatic);
-            else TouchSurface.Focus(FocusState.Programmatic);
+            // Pause and dialog restoration keep surface shortcuts available.
+            // Explicit keyboard navigation of the toolbar retains its focus.
+            FocusPlaybackSurface();
         }
     }
 

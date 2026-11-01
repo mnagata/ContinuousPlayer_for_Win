@@ -56,6 +56,7 @@ public sealed partial class MainPage : Page
     {
         windowActive = args.WindowActivationState != WindowActivationState.Deactivated;
         UpdateCursorAutoHide();
+        if (windowActive) FocusPlaybackSurface();
     }
 
     private void Page_SizeChanged(object sender, SizeChangedEventArgs e)
@@ -119,7 +120,12 @@ public sealed partial class MainPage : Page
         if (e.Key == VirtualKey.F11 && !IsKeyDown(VirtualKey.Menu))
         {
             e.Handled = true;
-            if (!e.KeyStatus.WasKeyDown) ((MainWindow)App.Window).ToggleFullscreen();
+            if (!e.KeyStatus.WasKeyDown)
+            {
+                KeyboardPlaybackActivity();
+                ((MainWindow)App.Window).ToggleFullscreen();
+                KeyboardPlaybackActivity();
+            }
             return;
         }
         if (BrowserOverlay.Visibility == Visibility.Visible)
@@ -135,7 +141,7 @@ public sealed partial class MainPage : Page
             return;
         }
         if (!isPlayback) return;
-        var toolbarFocus = IsWithin(focused, PauseToolbar);
+        var toolbarFocus = PlaybackToolbarHasFocus;
         if (toolbarFocus && e.Key is VirtualKey.Left or VirtualKey.Right or VirtualKey.Up or VirtualKey.Down)
         {
             MoveToolbarFocus(e.Key);
@@ -146,7 +152,7 @@ public sealed partial class MainPage : Page
             ? PlaybackInputTarget.Surface : PlaybackInputTarget.Control, IsKeyDown(VirtualKey.Shift));
         if (command == PlaybackCommand.None) return;
         e.Handled = true;
-        await ExecutePlaybackCommandAsync(command);
+        await ExecutePlaybackKeyboardCommandAsync(command);
     }
 
     private static bool IsWithin(DependencyObject? node, DependencyObject parent)
@@ -163,6 +169,11 @@ public sealed partial class MainPage : Page
     {
         if (disposed) return;
         disposed = true;
+        Vm.PropertyChanged -= PlaybackTitleBar_PropertyChanged;
+        if (keyboardRoot != null && keyboardHandler != null)
+            keyboardRoot.RemoveHandler(PreviewKeyDownEvent, keyboardHandler);
+        keyboardRoot = null;
+        keyboardHandler = null;
         App.Window.Activated -= Window_Activated;
         activeInfoDialog?.Hide();
         activeConnectionDialog?.Hide();

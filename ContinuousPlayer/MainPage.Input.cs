@@ -10,12 +10,17 @@ namespace ContinuousPlayer;
 public sealed partial class MainPage
 {
     private Interop.PlaybackInputMonitor? inputMonitor;
+    private UIElement? keyboardRoot;
+    private KeyEventHandler? keyboardHandler;
     private readonly PlaybackGestureRecognizer gestures = new();
     private readonly HashSet<uint> rootTouches = [];
 
     private void InitializeInput()
     {
-        Root.AddHandler(PreviewKeyDownEvent, new KeyEventHandler(Root_KeyDown), true);
+        // Include the window title bar, which is a sibling of this page.
+        keyboardRoot = App.Window.Content;
+        keyboardHandler = Root_KeyDown;
+        keyboardRoot.AddHandler(PreviewKeyDownEvent, keyboardHandler, true);
         Root.AddHandler(PointerPressedEvent, new PointerEventHandler(RootPointerPressed), true);
         Root.AddHandler(PointerReleasedEvent, new PointerEventHandler(RootPointerEnded), true);
         Root.AddHandler(PointerCanceledEvent, new PointerEventHandler(RootPointerEnded), true);
@@ -25,6 +30,12 @@ public sealed partial class MainPage
         // Windows' ordinary mouse double-click default is 500ms. Direct touch uses
         // the common 300ms baseline, while explicit OS timing adjustments take precedence.
         gestures.TouchDoubleTapMilliseconds = doubleClick is > 0 and not 500 ? doubleClick : 300;
+    }
+
+    private void FocusPlaybackSurface()
+    {
+        if (windowActive && PlaybackInputAllowed && !ControlsHaveKeyboardFocus)
+            TouchSurface.Focus(FocusState.Programmatic);
     }
 
     private void RootPointerPressed(object sender, PointerRoutedEventArgs e)
@@ -75,6 +86,13 @@ public sealed partial class MainPage
         }
     }
 
+    private async Task ExecutePlaybackKeyboardCommandAsync(PlaybackCommand command)
+    {
+        KeyboardPlaybackActivity();
+        await ExecutePlaybackCommandAsync(command);
+        KeyboardPlaybackActivity();
+    }
+
     private void MoveToolbarFocus(VirtualKey key)
     {
         var direction = key switch
@@ -82,7 +100,11 @@ public sealed partial class MainPage
             VirtualKey.Left => FocusNavigationDirection.Left, VirtualKey.Right => FocusNavigationDirection.Right,
             VirtualKey.Up => FocusNavigationDirection.Up, _ => FocusNavigationDirection.Down
         };
-        FocusManager.TryMoveFocus(direction, new FindNextElementOptions { SearchRoot = PauseToolbar });
+        var focused = FocusManager.GetFocusedElement(XamlRoot) as DependencyObject;
+        FocusManager.TryMoveFocus(direction, new FindNextElementOptions
+        {
+            SearchRoot = IsWithin(focused, WindowedTopToolbar) ? WindowedTopToolbar : PauseToolbar
+        });
     }
 
     private void PageBrowser(int direction)

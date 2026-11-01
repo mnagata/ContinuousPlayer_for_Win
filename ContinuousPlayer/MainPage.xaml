@@ -25,6 +25,11 @@
                 </StackPanel>
             </Grid>
         </ScrollViewer>
+        <StackPanel x:Name="WindowedTopToolbar" Visibility="Collapsed" VerticalAlignment="Center" Orientation="Horizontal">
+                <Button x:Name="WindowedHomeButton" Click="Home_Click" Style="{StaticResource PlayerButtonStyle}" Width="40" Height="40" AutomationProperties.AutomationId="PlayerHome" AutomationProperties.Name="ホームに戻る" ToolTipService.ToolTip="ホームに戻る (H)"><FontIcon Glyph="&#xE80F;" FontSize="16" Width="16" Height="16"/></Button>
+                <Button x:Name="WindowedFilesButton" Click="PlaybackFolder_Click" Style="{StaticResource PlayerButtonStyle}" Width="40" Height="40" AutomationProperties.AutomationId="PlaybackFolder" AutomationProperties.Name="ファイル一覧" ToolTipService.ToolTip="ファイル一覧 (O)"><FontIcon Glyph="&#xED25;" FontSize="16" Width="16" Height="16"/></Button>
+                <Button x:Name="WindowedInfoButton" Click="Info_Click" Style="{StaticResource PlayerButtonStyle}" Width="40" Height="40" AutomationProperties.AutomationId="PlaybackInfo" AutomationProperties.Name="メディア情報" ToolTipService.ToolTip="メディア情報 (I)"><FontIcon Glyph="&#xE946;" FontSize="16" Width="16" Height="16"/></Button>
+        </StackPanel>
         <Grid x:Name="Playback" Visibility="Collapsed" Background="{ThemeResource CanvasBrush}">
             <MediaPlayerElement x:Name="Player" AreTransportControlsEnabled="False" AutoPlay="False" Stretch="Uniform" IsTabStop="False" IsHitTestVisible="False" AutomationProperties.AutomationId="VideoPlayer" AutomationProperties.Name="メディア映像"/>
             <local:CursorSurface x:Name="TouchSurface" Background="Transparent" IsTabStop="True" UseSystemFocusVisuals="False" PointerPressed="Surface_Pressed" PointerReleased="Surface_Released" PointerCanceled="Surface_Canceled" PointerCaptureLost="Surface_Canceled" AutomationProperties.AutomationId="TouchSurface" AutomationProperties.Name="再生操作。左右でファイル移動、上下で10秒シーク、Spaceで再生切り替え">
@@ -35,7 +40,8 @@
                 <TextBlock Text="{x:Bind Vm.PlaybackTitle, Mode=OneWay}" AutomationProperties.AccessibilityView="Raw" Style="{StaticResource SubtitleTextBlockStyle}" TextWrapping="Wrap" MaxLines="3" TextTrimming="CharacterEllipsis" TextAlignment="Center" Foreground="{ThemeResource MainTextBrush}"/>
             </StackPanel>
             <Grid x:Name="PauseToolbar" Visibility="Collapsed" GotFocus="Chrome_FocusChanged" LostFocus="Chrome_FocusChanged" AutomationProperties.AutomationId="PlaybackChrome">
-                <Grid x:Name="TopToolbar" VerticalAlignment="Top" Background="{ThemeResource ToolbarBrush}" ColumnSpacing="4" Padding="8,4">
+                <Border x:Name="TopToolbarOverlayHost" VerticalAlignment="Top" Background="{ThemeResource ToolbarBrush}" Padding="8,4">
+                <Grid x:Name="TopToolbar" VerticalAlignment="Center" HorizontalAlignment="Stretch" ColumnSpacing="4">
                     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                     <TextBlock Text="{x:Bind Vm.PlaybackTitle, Mode=OneWay}" AutomationProperties.Name="{x:Bind Vm.FileName, Mode=OneWay}" AutomationProperties.AutomationId="PlaybackTitle" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Foreground="{ThemeResource MainTextBrush}" ToolTipService.ToolTip="{x:Bind Vm.FileName, Mode=OneWay}"/>
                     <TextBlock Grid.Column="1" Text="{x:Bind Vm.PlaybackStatus, Mode=OneWay}" AutomationProperties.AutomationId="PlaybackStatus" AutomationProperties.LiveSetting="Polite" VerticalAlignment="Center" MaxWidth="160" TextTrimming="CharacterEllipsis" Foreground="{ThemeResource MainTextBrush}" ToolTipService.ToolTip="{x:Bind Vm.PlaybackStatus, Mode=OneWay}"/>
@@ -46,6 +52,7 @@
                     </StackPanel>
                     <Button x:Name="FullscreenButton" Grid.Column="3" Visibility="Collapsed" Click="Fullscreen_Click" Style="{StaticResource PlayerButtonStyle}" AutomationProperties.AutomationId="PlaybackFullscreen" AutomationProperties.Name="全画面を解除" ToolTipService.ToolTip="全画面を解除 (F11)"><FontIcon Glyph="&#xE73F;"/></Button>
                 </Grid>
+                </Border>
                 <Border VerticalAlignment="Bottom" Background="{ThemeResource ToolbarBrush}" Padding="8,4">
                     <StackPanel x:Name="BottomToolbar" HorizontalAlignment="Center" Orientation="Horizontal" Spacing="8">
                         <Button x:Name="PreviousButton" Click="Previous_Click" Style="{StaticResource PlayerButtonStyle}" AutomationProperties.AutomationId="PreviousFile" AutomationProperties.Name="前のファイル" ToolTipService.ToolTip="前のファイル"><FontIcon Glyph="&#xE892;"/></Button>

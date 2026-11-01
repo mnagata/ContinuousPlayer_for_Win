@@ -284,7 +284,7 @@ public sealed partial class MainPage
         DispatcherQueue.TryEnqueue(async () =>
         {
             if (mediaPlayer == null || sender != mediaPlayer.SystemMediaTransportControls) return;
-            await ExecutePlaybackCommandAsync(command);
+            await ExecutePlaybackKeyboardCommandAsync(command);
         });
     }
 

@@ -44,9 +44,9 @@ function PickFolder {
 function CheckLayout([string]$Name){
     $items=Inspect;$ids=@('PlayerHome','PlaybackFolder','PlaybackInfo','PreviousFile','SeekBackward','Resume','SeekForward','NextFile')
     $buttons=@($items | Where-Object {$_.automationId -in $ids});if($buttons.Count -ne 8){throw 'Eight main commands were not exposed.'}
-    $title=$items | Where-Object {$_.automationId -eq 'PlaybackTitle'} | Select-Object -First 1
+    $title=$items | Where-Object {$_.automationId -in @('PART_TitleText','PlaybackTitle') -and !$_.isOffscreen} | Select-Object -First 1
     $bottom=$buttons | Where-Object {$_.automationId -eq 'Resume'}
-    foreach($b in $buttons){if($b.width -lt 47 -or $b.height -lt 47 -or $b.x -lt 0 -or $b.y -lt 0){throw "Clipped target $($b.automationId)"}}
+    foreach($b in $buttons){$minimum=if($b.automationId -in @('PlayerHome','PlaybackFolder','PlaybackInfo')){39}else{47};if($b.width -lt $minimum -or $b.height -lt $minimum -or $b.x -lt 0 -or $b.y -lt 0){throw "Clipped target $($b.automationId)"}}
     $top=@($buttons | Where-Object {$_.automationId -in @('PlayerHome','PlaybackFolder','PlaybackInfo')} | Sort-Object x)
     if(($top.automationId -join ',') -ne 'PlayerHome,PlaybackFolder,PlaybackInfo'){throw 'Top command order differs.'}
     $lower=@($buttons | Where-Object {$_.automationId -in @('PreviousFile','SeekBackward','Resume','SeekForward','NextFile')} | Sort-Object x)
@@ -104,7 +104,7 @@ try {
         $v=Info 'information-order'
         if($v.text.IndexOf('ファイル') -ge $v.text.IndexOf('映像・音声形式') -or $v.text.IndexOf('映像・音声形式') -ge $v.text.IndexOf('音声出力')){throw 'Information order differs.'}
         if($v.text -notmatch '名前: Sample OP.wav' -or $v.text -notmatch '未対応'){throw 'Name/capability missing.'};CloseInfo
-        $title=UI @('get-value','PlaybackTitle','--json') | ConvertFrom-Json;if($title.text -ne 'Sample OP'){throw 'Extension not removed.'}
+        $title=UI @('get-value','PART_TitleText','--json') | ConvertFrom-Json;if($title.text -ne 'Sample OP'){throw 'Extension not removed.'}
     }
     Case 'S20: fullscreen buttons and F11 keep file, position, intent and fullscreen home' {
         UI @('invoke','SeekForward') | Out-Null;$before=Info 'before-fullscreen';CloseInfo
@@ -131,7 +131,7 @@ try {
     Start-Sleep -Seconds 1;[Stage3Native]::KeyPress($hwnd,32);State '再生'
     Case 'S24 S25: final next is disabled and dotted video title loses only its extension' {
         Enabled 'NextFile' $false;Enabled 'PreviousFile' $true
-        $v=UI @('get-value','PlaybackTitle','--json') | ConvertFrom-Json;if($v.text -ne 'zz.Movie.version.1'){throw 'Dotted title changed.'};Capture '08-video-paused'
+        $v=UI @('get-value','PART_TitleText','--json') | ConvertFrom-Json;if($v.text -ne 'zz.Movie.version.1'){throw 'Dotted title changed.'};Capture '08-video-paused'
         $script:playerBefore=Inspect | Where-Object {$_.automationId -eq 'VideoPlayer'} | Select-Object -First 1
         if(!$playerBefore){throw 'Video bounds unavailable.'}
     }
@@ -151,17 +151,37 @@ try {
         if(!$after){throw 'Video bounds unavailable after toggling.'}
         foreach($p in @('x','y','width','height')){if($after.$p -ne $playerBefore.$p){throw "Video layout moved: $p"}}
     }
-    Case 'S22: focused controls and pointer over a button keep the commands and cursor' {
+    Case 'S22: keyboard-focused controls keep the commands and cursor' {
         UI @('focus','PlaybackFolder') | Out-Null;Keys 'enter';Wait 'BrowserList';UI @('invoke','BrowserCancel') | Out-Null
         UI @('focus','PlaybackFolder') | Out-Null
         # Keep the paused intent here, then explicitly resume via SMTC-independent surface input.
         UI @('focus','TouchSurface') | Out-Null;[Stage3Native]::KeyPress($hwnd,32)
-        UI @('focus','PlaybackFolder') | Out-Null;Start-Sleep -Seconds 4;Wait 'PlaybackFolder';Capture '12-focused-playing'
-        UI @('focus','TouchSurface') | Out-Null;UI @('hover','PlaybackInfo') | Out-Null
-        Start-Sleep -Seconds 4;if(![Stage3Native]::Visible($hwnd)){throw 'Hover hid cursor.'};Capture '13-hover-playing'
-        [Stage3Native]::KeyPress($hwnd,32)
+        UI @('focus','PlayerHome') | Out-Null;Keys 'right'
+        UI @('wait-for','PlaybackFolder','-p','HasKeyboardFocus','--value','True','-t','3000') | Out-Null
+        Start-Sleep -Seconds 4;Wait 'PlaybackFolder';Capture '12-focused-playing'
     }
-} catch {if(!$results.Count -or $results[$results.Count-1].status -ne 'FAIL'){$results.Add(@{name='Setup / execution';status='FAIL';detail="$_"})};Write-Host "FAIL $_"}
+    Case 'Video overlays hide after three idle seconds over a button and restore on movement' {
+        UI @('focus','TouchSurface') | Out-Null;UI @('hover','SeekForward') | Out-Null
+        Start-Sleep -Milliseconds 700
+        if(![Stage3Native]::Visible($hwnd)){throw 'Hover hid before the idle delay.'};Capture '13-hover-active'
+        $before=[Stage3Native]::Position();Start-Sleep -Milliseconds 2800
+        if([Stage3Native]::Visible($hwnd)){throw 'Stationary hover prevented auto-hide.'}
+        if([Stage3Native]::Position() -ne $before){throw 'Pointer moved during hover idle.'};Capture '14-hover-idle'
+        [Stage3Native]::Move($hwnd);Start-Sleep -Milliseconds 200
+        if(![Stage3Native]::Visible($hwnd)){throw 'Movement did not restore after hover idle.'};Capture '15-hover-restored'
+        [Stage3Native]::KeyPress($hwnd,32)
+        State '再生'
+    }
+    Case 'Mouse resume hides the video overlays immediately' {
+        UI @('click','Resume') | Out-Null
+        Start-Sleep -Milliseconds 150
+        if([Stage3Native]::Visible($hwnd)){throw 'Resume did not hide controls immediately.'};Capture '16-click-resumed'
+        $before=[Stage3Native]::Position();Start-Sleep -Milliseconds 3200
+        if([Stage3Native]::Visible($hwnd)){throw 'Mouse focus prevented auto-hide.'}
+        if([Stage3Native]::Position() -ne $before){throw 'Pointer moved during mouse-focus idle.'};Capture '17-click-idle'
+        [Stage3Native]::KeyPress($hwnd,32);State '再生'
+    }
+} catch {if(!$results.Count -or $results[$results.Count-1].status -ne 'FAIL'){$results.Add(@{name='Setup / execution';status='FAIL';detail="$_"});try{Capture 'setup-failure'}catch{}};Write-Host "FAIL $_"}
 finally {
     try{if($appPid -gt 0 -and (Get-Process -Id $appPid -ErrorAction SilentlyContinue)){Remove-TestFixtureRegistration}}catch{$results.Add(@{name='Fixture registration cleanup';status='FAIL';detail="$_"})}
     if($hwnd -and (Get-Process -Id $appPid -ErrorAction SilentlyContinue)){[Stage3Native]::Close($hwnd)}
