@@ -3,6 +3,7 @@
 [CmdletBinding()]
 param(
     [ValidateSet('x64', 'ARM64')][string]$Platform = 'x64',
+    [ValidateSet('Debug', 'Release')][string]$Configuration = 'Debug',
     [switch]$UseConfiguredPackageSources
 )
 
@@ -88,26 +89,30 @@ try {
         }
         if (!(Test-Path -LiteralPath $cachePath)) { throw "Local NuGet package cache is missing: $cachePath" }
         $sourceArguments = @('--source', $cachePath)
+        $userCache = Join-Path ([Environment]::GetFolderPath('UserProfile')) '.nuget\packages'
+        if ((Test-Path -LiteralPath $userCache) -and [IO.Path]::GetFullPath($userCache).TrimEnd('\') -ne [IO.Path]::GetFullPath($cachePath).TrimEnd('\')) {
+            $sourceArguments += @('--source', $userCache)
+        }
     }
     $buildOptions = @('--no-restore', '--disable-build-servers', '-p:UseSharedCompilation=false', '-nologo')
     $appProject = 'ContinuousPlayer/ContinuousPlayer.csproj'
     $testProject = 'tests/ContinuousPlayer.Core.Tests/ContinuousPlayer.Core.Tests.csproj'
 
     $appRestored = Invoke-ReadinessStep 'app-restore' 'dotnet' (
-        @('restore', $appProject, '-r', $runtime, "-p:Platform=$Platform") + $restoreProperties + $sourceArguments)
+        @('restore', $appProject, '-r', $runtime, "-p:Platform=$Platform", "-p:Configuration=$Configuration") + $restoreProperties + $sourceArguments)
     if ($appRestored) {
         $null = Invoke-ReadinessStep 'app-build' 'dotnet' (
-            @('build', $appProject, '-c', 'Debug', "-p:Platform=$Platform") + $buildOptions)
+            @('build', $appProject, '-c', $Configuration, "-p:Platform=$Platform") + $buildOptions)
     } else { Add-SkippedStep 'app-build' 'App restore failed.' }
 
     $testsRestored = Invoke-ReadinessStep 'core-restore' 'dotnet' (
-        @('restore', $testProject) + $restoreProperties + $sourceArguments)
+        @('restore', $testProject, "-p:Configuration=$Configuration") + $restoreProperties + $sourceArguments)
     if ($testsRestored) {
         $testsBuilt = Invoke-ReadinessStep 'core-build' 'dotnet' (
-            @('build', $testProject, '-c', 'Debug') + $buildOptions)
+            @('build', $testProject, '-c', $Configuration) + $buildOptions)
         if ($testsBuilt) {
             $null = Invoke-ReadinessStep 'core-tests' 'dotnet' @(
-                'tests/ContinuousPlayer.Core.Tests/bin/Debug/net10.0/ContinuousPlayer.Core.Tests.dll')
+                "tests/ContinuousPlayer.Core.Tests/bin/$Configuration/net10.0/ContinuousPlayer.Core.Tests.dll")
         } else { Add-SkippedStep 'core-tests' 'Core test build failed.' }
     } else {
         Add-SkippedStep 'core-build' 'Core restore failed.'
@@ -130,7 +135,7 @@ $report = [ordered]@{
     schemaVersion = 1; generatedAtUtc = [DateTimeOffset]::UtcNow.ToString('o')
     kind = 'build-and-core-baseline'; migrationAcceptanceVerified = $false
     success = $success; repository = $repoRoot; gitHead = $gitHead; gitStatusBefore = $gitStatus
-    platform = $Platform; runtimeIdentifier = $runtime
+    platform = $Platform; configuration = $Configuration; runtimeIdentifier = $runtime
     packageSources = $(if ($UseConfiguredPackageSources) { 'configured' } else { 'local-cache-only' })
     trackedLockUnchanged = ($lockHashBefore -eq $lockHashAfter)
     lockSha256Before = $lockHashBefore; lockSha256After = $lockHashAfter

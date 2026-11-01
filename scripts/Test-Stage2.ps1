@@ -17,13 +17,13 @@ $results=[Collections.Generic.List[object]]::new()
 $observations=[Collections.Generic.List[object]]::new()
 $screenshots=[Collections.Generic.List[string]]::new()
 function Checked([string[]]$Arguments){$r=@(& winapp @Arguments);if($LASTEXITCODE -ne 0){throw "winapp $($Arguments -join ' ') failed: $($r -join "`n")"};$r}
-function UI([string[]]$Arguments,[string]$Window){$target=if($Window){@('-w',$Window)}else{@('-a',"$appPid")};Checked (@('ui')+$Arguments+$target)}
+function UI([string[]]$Arguments,[string]$Window){$target=if($Window){@('-w',$Window)}elseif($hwnd -and $Arguments[0] -ne 'list-windows'){@('-w',"$hwnd")}else{@('-a',"$appPid")};Checked (@('ui')+$Arguments+$target)}
 function Wait([string]$Id){if($Id -eq 'Resume'){UI @('wait-for','Resume','-p','Name','--value','再生','-t','5000') | Out-Null;return};UI @('wait-for',$Id,'-t','5000') | Out-Null}
 function Gone([string]$Id){if($Id -eq 'Resume'){UI @('wait-for','Resume','-p','Name','--value','一時停止','-t','5000') | Out-Null;return};UI @('wait-for',$Id,'--gone','-t','5000') | Out-Null}
 function Keys([string]$Text){UI @('send-keys',$Text,'--via','send-input') | Out-Null}
 function Nodes($items){foreach($item in $items){if($null -ne $item){$item;Nodes $item.children}}}
 function Inspect([string]$Window){$t=UI @('inspect','--json','-d','12') -Window $Window | ConvertFrom-Json;@(Nodes @($t.windows | ForEach-Object {$_.elements}))}
-function Case([string]$Name,[scriptblock]$Action){try{& $Action | Out-Null;$results.Add(@{name=$Name;status='PASS'});Write-Host "PASS $Name"}catch{$results.Add(@{name=$Name;status='FAIL';detail="$_"});throw}}
+function Case([string]$Name,[scriptblock]$Action){try{& $Action | Out-Null;$results.Add(@{name=$Name;status='PASS'});Write-Host "PASS $Name"}catch{$results.Add(@{name=$Name;status='FAIL';detail="$_"});try{Capture 'failure';UI @('inspect','--json','-d','14') | Set-Content -LiteralPath (Join-Path $artifacts 'failure-tree.json') -Encoding utf8}catch{};throw}}
 function Capture([string]$Name){$p=Join-Path $artifacts "$Name.png";UI @('screenshot','--output',$p,'--json') | Out-Null;if(!(Test-Path -LiteralPath $p)){throw 'Screenshot missing.'};$screenshots.Add($p)}
 function Info([string]$Name){
     Keys 'i';Wait 'MediaInfoText';$v=UI @('get-value','MediaInfoText','--json') | ConvertFrom-Json
@@ -60,7 +60,11 @@ public static class Stage2Native {
  [StructLayout(LayoutKind.Sequential)] struct Message {public IntPtr Hwnd;public uint Msg;public UIntPtr W;public IntPtr L;public uint Time;public Point Point;public uint Private;}
  static HashSet<ushort> owned=new HashSet<ushort>();static IntPtr probe;static Thread probeThread;
  [DllImport("user32.dll",SetLastError=true)]static extern uint SendInput(uint count,Input[] data,int size);
- [DllImport("user32.dll")]static extern bool SetPhysicalCursorPos(int x,int y);
+ [DllImport("user32.dll")]static extern bool SetCursorPos(int x,int y);
+ [DllImport("user32.dll")]static extern bool GetCursorPos(out Point point);
+ [DllImport("user32.dll")]static extern IntPtr SetThreadDpiAwarenessContext(IntPtr context);
+ [DllImport("user32.dll")]static extern IntPtr WindowFromPoint(Point point);
+ [DllImport("user32.dll")]static extern IntPtr GetAncestor(IntPtr window,uint flags);
  public static IntPtr Target;
  [DllImport("user32.dll")]public static extern IntPtr GetForegroundWindow();
  [DllImport("user32.dll")]public static extern uint GetDpiForWindow(IntPtr window);
@@ -73,7 +77,7 @@ public static class Stage2Native {
  static void Send(params Input[] data){if(IntPtr.Size!=8 || SendInput((uint)data.Length,data,40)!=data.Length)throw new Exception("Synthetic input was not delivered.");}
  public static void Down(ushort key){if(GetForegroundWindow()!=Target)throw new Exception("Target lost foreground");owned.Add(key);Send(new Input{Type=1,Key=new Key{Vk=key}});}
  public static void Up(ushort key){Send(new Input{Type=1,Key=new Key{Vk=key,Flags=2}});owned.Remove(key);}
- public static void Click(int x,int y){var foreground=GetForegroundWindow();if(foreground!=Target && (probe==IntPtr.Zero || foreground!=probe))throw new Exception("Target lost foreground");if(!SetPhysicalCursorPos(x,y))throw new Exception("Physical cursor move failed");Send(new Input{Mouse=new Mouse{Flags=2}},new Input{Mouse=new Mouse{Flags=4}});}
+ public static void Click(int x,int y){var foreground=GetForegroundWindow();if(foreground!=Target && (probe==IntPtr.Zero || foreground!=probe))throw new Exception("Target lost foreground");var previous=SetThreadDpiAwarenessContext(new IntPtr(-4));try{if(!SetCursorPos(x,y)||!GetCursorPos(out var point))throw new Exception("Cursor move failed");var hit=GetAncestor(WindowFromPoint(point),2);if(hit!=Target)throw new Exception("Click is outside target window: requested "+x+","+y+"; actual "+point.X+","+point.Y+"; hit "+hit+"; target "+Target);Send(new Input{Mouse=new Mouse{Flags=2}},new Input{Mouse=new Mouse{Flags=4}});}finally{if(previous!=IntPtr.Zero)SetThreadDpiAwarenessContext(previous);}}
  public static void Release(){foreach(var key in new List<ushort>(owned))Up(key);}
  public static IntPtr OpenProbe(){var ready=new ManualResetEventSlim();probeThread=new Thread(()=>{probe=CreateWindowExW(0,"STATIC","Stage2 activation probe",0x10CF0000,100,100,300,160,IntPtr.Zero,IntPtr.Zero,IntPtr.Zero,IntPtr.Zero);CreateWindowExW(0,"BUTTON","Activate probe",0x50010000,20,20,220,60,probe,IntPtr.Zero,IntPtr.Zero,IntPtr.Zero);ready.Set();while(IsWindow(probe)){Message m;while(PeekMessageW(out m,IntPtr.Zero,0,0,1)){TranslateMessage(ref m);DispatchMessageW(ref m);}Thread.Sleep(5);}});probeThread.IsBackground=true;probeThread.SetApartmentState(ApartmentState.STA);probeThread.Start();if(!ready.Wait(5000)||probe==IntPtr.Zero)throw new Exception("No test focus window.");return probe;}
  public static void CloseProbe(){if(probe!=IntPtr.Zero)PostMessageW(probe,0x10,UIntPtr.Zero,IntPtr.Zero);if(probeThread!=null)probeThread.Join(1000);probe=IntPtr.Zero;}
@@ -88,7 +92,7 @@ try{
     $appPid=[int]$launch.ProcessId;if(!$appPid){throw 'No local app process.'}
     $launch | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $artifacts 'launch.json') -Encoding utf8
     Wait 'ChooseFolder';UI @('wait-for','ChooseFolder','-p','IsEnabled','--value','True','-t','10000') | Out-Null
-    $main=@(UI @('list-windows','--json') | ConvertFrom-Json) | Where-Object {$_.processId -eq $appPid -and $_.ownerHwnd -eq 0} | Select-Object -First 1
+    $main=@(UI @('list-windows','--json') | ConvertFrom-Json) | Where-Object {$_.processId -eq $appPid -and $_.ownerHwnd -eq 0 -and $_.className -eq 'WinUIDesktopWin32WindowClass'} | Select-Object -First 1
     $hwnd=[IntPtr]::new([long]$main.hwnd)
     [Stage2Native]::Target=$hwnd
     UI @('focus','ChooseFolder') | Out-Null

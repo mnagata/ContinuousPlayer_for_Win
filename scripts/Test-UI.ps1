@@ -1,6 +1,9 @@
 param([int]$AppPid = 0, [string]$ArtifactDirectory = (Join-Path $PSScriptRoot '..\ui-test-artifacts\suite'))
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
+$launchedHere = $false
+. (Join-Path $PSScriptRoot 'Migration-TestRegistration.ps1')
+$fixtureName = 'Legacy-' + [guid]::NewGuid().ToString('N')
 $ArtifactDirectory = [IO.Path]::GetFullPath($ArtifactDirectory)
 New-Item -ItemType Directory -Force -Path $ArtifactDirectory | Out-Null
 $previousWorkflow = $env:WINAPP_UI_WORKFLOW_ID
@@ -27,7 +30,8 @@ function Inspect([string]$Window) {
 function Wait([string]$Selector) { if($Selector -eq 'Resume'){ UI @('wait-for','Resume','-p','Name','--value','再生','-t','5000') | Out-Null; return }; UI @('wait-for', $Selector, '-t', '5000') | Out-Null }
 function Capture([string]$Name) {
     $path = Join-Path $ArtifactDirectory ($Name + '.png')
-    UI @('screenshot','--output',$path,'--json') -Window $script:mainHwnd | Out-Null
+    Start-Sleep -Seconds 1
+    UI @('screenshot','--capture-screen','--output',$path,'--json') -Window $script:mainHwnd | Out-Null
     if (!(Test-Path -LiteralPath $path)) { throw "Screenshot missing: $path" }
     $screenshots.Add($path)
 }
@@ -52,10 +56,12 @@ function PickerButton([string]$Window, [string]$Id) {
 
 try {
     if ($AppPid -eq 0) {
-        $launch = Invoke-WinAppChecked @('run',(Join-Path $PSScriptRoot '..\ContinuousPlayer'),'--detach','--json') | ConvertFrom-Json
+        $launch = Invoke-WinAppChecked @('run',(Join-Path $PSScriptRoot '..\ContinuousPlayer'),'--arch','x64','--no-build','--no-restore','--detach','--json') | ConvertFrom-Json
         $AppPid = [int]$launch.ProcessId
         if (!$AppPid) { throw 'Launch did not return an app PID.' }
+        $launchedHere = $true
     }
+    UI @('wait-for','ChooseFolder','-t','15000') | Out-Null
     $windows = @(UI @('list-windows','--json') | ConvertFrom-Json)
     $main = $windows | Where-Object { $_.processId -eq $AppPid -and $_.ownerHwnd -eq 0 -and $_.className -eq 'WinUIDesktopWin32WindowClass' } | Select-Object -First 1
     if (!$main) { throw 'Main app window not found.' }
@@ -77,7 +83,7 @@ try {
         UI @('wait-for','BrowserRefresh','-p','IsEnabled','--value','True','-t','3000')
         Wait 'PC / ローカルフォルダー'
     }
-    $mediaPath = & (Join-Path $PSScriptRoot 'New-TestMedia.ps1')
+    $mediaPath = & (Join-Path $PSScriptRoot 'New-TestMedia.ps1') -Directory (Join-Path $PSScriptRoot "..\.tools\legacy-media\$fixtureName")
     Case 'Native picker selects a registration folder without starting playback' {
         UI @('click','PC / ローカルフォルダー'); $pickerWindow = Picker
         UI @('set-value','1152', $mediaPath) -Window $pickerWindow; PickerButton $pickerWindow '1'
@@ -85,8 +91,9 @@ try {
         Capture '04-registration-folder'
     }
     Case 'Register local folder and reopen from library' {
-        UI @('invoke','RegisterFolder'); Wait 'ui-media'; Capture '05-registered'
-        UI @('click','ui-media'); Wait 'Sample OP.wav'
+        UI @('invoke','RegisterFolder'); $script:registeredFixtureName=$fixtureName; $script:testFixtureWasRegistered=$true
+        Wait $fixtureName; Capture '05-registered'
+        UI @('click',$fixtureName); Wait 'Sample OP.wav'
         $items = @(Inspect | Where-Object { $_.type -eq 'ListItem' })
         $names = @($items | ForEach-Object { ($_.name -split '。')[0] })
         if (($names -join '|') -ne 'Sample OP.wav|Sample ED.wav|Sample OP2.wav|Sample ED2.wav') { throw "Unexpected media order: $($names -join '|')" }
@@ -131,10 +138,11 @@ try {
     }
     Case 'Offline-safe unregister confirmation does not delete media' {
         UI @('invoke','BrowserBack'); Wait 'BrowserList'
-        $savedItem = Inspect | Where-Object { $_.type -eq 'ListItem' -and $_.name.StartsWith('ui-media。') } | Select-Object -First 1
+        $savedItem = Inspect | Where-Object { $_.type -eq 'ListItem' -and $_.name.StartsWith($fixtureName+'。') } | Select-Object -First 1
         if (!$savedItem) { throw 'Saved test folder was not found.' }
         UI @('invoke',$savedItem.selector,'--action','select'); UI @('send-keys','delete','--via','send-input'); Wait 'PrimaryButton'
-        UI @('invoke','PrimaryButton'); UI @('wait-for','ui-media','--gone','-t','3000')
+        UI @('invoke','PrimaryButton'); UI @('wait-for',$fixtureName,'--gone','-t','3000')
+        $script:registeredFixtureName=$null
         if (!(Test-Path -LiteralPath (Join-Path $mediaPath 'Sample OP.wav'))) { throw 'Media was removed.' }
         UI @('invoke','BrowserCancel'); Wait 'VideoPlayer'
         UI @('send-keys','h','--via','send-input'); Wait 'ChooseFolder'; Capture '09-final-home'
@@ -143,6 +151,12 @@ try {
     if (!$results.Count -or $results[$results.Count-1].status -ne 'FAIL') { $results.Add(@{ name='Suite execution'; status='FAIL'; detail="$_" }) }
     Write-Host "FAIL $_"
 } finally {
+    try { if($script:registeredFixtureName -and (Get-Process -Id $AppPid -ErrorAction SilentlyContinue)){Remove-TestFixtureRegistration} }
+    catch { $results.Add(@{name='Owned fixture registration cleanup';status='FAIL';detail="$_"}) }
+    if($launchedHere -and (Get-Process -Id $AppPid -ErrorAction SilentlyContinue)) {
+        $app=Get-Process -Id $AppPid; $app.CloseMainWindow() | Out-Null
+        if(!$app.WaitForExit(5000)){$results.Add(@{name='Close test app';status='FAIL';detail='App did not close.'})}
+    }
     try { Invoke-WinAppChecked @('ui','yield') | Out-Null } finally { $env:WINAPP_UI_WORKFLOW_ID = $previousWorkflow }
 }
 $failed = @($results | Where-Object { $_.status -eq 'FAIL' }).Count

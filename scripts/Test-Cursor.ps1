@@ -46,6 +46,7 @@ public static class NativeCursorTest {
     [DllImport("user32.dll")] static extern bool GetCursorInfo(ref Info i);
     [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr w, out Rect r);
     [DllImport("user32.dll")] static extern bool SetCursorPos(int x, int y);
+    [DllImport("user32.dll",EntryPoint="SetThreadDpiAwarenessContext")] static extern IntPtr SetCursorDpiContext(IntPtr context);
     [StructLayout(LayoutKind.Sequential)] struct ScreenPoint {public int x,y;}
     [DllImport("user32.dll")] static extern bool GetPhysicalCursorPos(out ScreenPoint p);
     [DllImport("user32.dll")] static extern uint SendInput(uint n, Input[] inputs, int size);
@@ -58,9 +59,10 @@ public static class NativeCursorTest {
     public static IntPtr Picker(IntPtr owner) { IntPtr result=IntPtr.Zero; EnumWindows((w,l)=> { if(Class(w)=="#32770" && GetWindow(w,4)==owner && IsWindowVisible(w)) result=w; return true; },IntPtr.Zero); return result; }
     public static void Guard(IntPtr w) { if (GetForegroundWindow()!=w) throw new Exception("Target lost foreground"); }
     public static void KeyPress(IntPtr w, ushort vk) { Guard(w); var down=new[]{new Input { type=1,u=new Union{key=new Key{vk=vk}} }}; var up=new[]{new Input { type=1,u=new Union{key=new Key{vk=vk,flags=2}} }}; if(SendInput(1,down,Marshal.SizeOf<Input>())!=1) throw new Exception("Key down failed"); Thread.Sleep(80); if(SendInput(1,up,Marshal.SizeOf<Input>())!=1) throw new Exception("Key up failed"); }
-    public static void Move(IntPtr w,int dx=0) { Guard(w); GetWindowRect(w,out var r); if(!SetCursorPos((r.left+r.right)/2+dx,(r.top+r.bottom)/2)) throw new Exception("Move failed"); var input=new[]{new Input{type=0,u=new Union{mouse=new Mouse{dx=20,flags=1}}}}; if(SendInput(1,input,Marshal.SizeOf<Input>())!=1) throw new Exception("Mouse input failed"); Thread.Sleep(100); }
+    public static void Move(IntPtr w,int dx=0) { Guard(w); var old=SetCursorDpiContext(new IntPtr(-4));try{GetWindowRect(w,out var r); if(!SetCursorPos((r.left+r.right)/2+dx,(r.top+r.bottom)/2)) throw new Exception("Move failed"); var input=new[]{new Input{type=0,u=new Union{mouse=new Mouse{dx=20,flags=1}}}}; if(SendInput(1,input,Marshal.SizeOf<Input>())!=1) throw new Exception("Mouse input failed"); Thread.Sleep(100);}finally{if(old!=IntPtr.Zero)SetCursorDpiContext(old);} }
     public static string Position() { if(!GetPhysicalCursorPos(out var p)) throw new Exception("Read position failed"); return $"{p.x},{p.y}"; }
-    public static void ClickLeft(IntPtr w) { Guard(w); GetWindowRect(w,out var r); SetCursorPos(r.left+(r.right-r.left)/4,(r.top+r.bottom)/2); var a=new[]{new Input{type=0,u=new Union{mouse=new Mouse{flags=2}}},new Input{type=0,u=new Union{mouse=new Mouse{flags=4}}}}; if(SendInput(2,a,Marshal.SizeOf<Input>())!=2) throw new Exception("Click failed"); }
+    public static string CursorState() { var i=new Info{size=Marshal.SizeOf<Info>()};if(!GetCursorInfo(ref i))throw new Exception("Cursor state unavailable");return $"flags={i.flags}; handle={i.cursor}; position={Position()}"; }
+    public static void ClickLeft(IntPtr w) { Guard(w); var old=SetCursorDpiContext(new IntPtr(-4));try{GetWindowRect(w,out var r); if(!SetCursorPos(r.left+(r.right-r.left)/4,(r.top+r.bottom)/2))throw new Exception("Move failed"); var a=new[]{new Input{type=0,u=new Union{mouse=new Mouse{flags=2}}},new Input{type=0,u=new Union{mouse=new Mouse{flags=4}}}}; if(SendInput(2,a,Marshal.SizeOf<Input>())!=2) throw new Exception("Click failed");}finally{if(old!=IntPtr.Zero)SetCursorDpiContext(old);} }
     public static bool Visible(IntPtr w) {
         Guard(w); var i=new Info{size=Marshal.SizeOf<Info>()}; if(!GetCursorInfo(ref i)) throw new Exception("Read failed");
         if((i.flags&1)==0) return false;
@@ -77,14 +79,14 @@ if ($w -eq [IntPtr]::Zero) { throw 'Main window not found.' }
 [NativeCursorTest]::SetForegroundWindow($w) | Out-Null
 Start-Sleep -Milliseconds 700
 $script:infoOpen=$false
-function UI([string[]]$Arguments){$r=@(& winapp ui @Arguments -w "$w");if($LASTEXITCODE){throw ($r -join "`n")};$r}
+function UI([string[]]$Arguments){$scope=if($Arguments[0] -eq 'yield'){@()}else{@('-w',"$w")};$r=@(& winapp ui @Arguments @scope);if($LASTEXITCODE){throw ($r -join "`n")};$r}
 function Key([int]$vk) { [NativeCursorTest]::KeyPress($w,$vk); Start-Sleep -Milliseconds 500; if($vk -eq 73){$script:infoOpen=$true};if($vk -eq 27){$script:infoOpen=$false} }
 function Check([string]$name,[bool]$expected) {
     $actual=[NativeCursorTest]::Visible($w)
     $position=[NativeCursorTest]::Position()
     $positionUnchanged=$expected -or $position -eq $script:lastVisiblePosition
     $status=if($actual -eq $expected -and $positionUnchanged) { 'PASS' } else { 'FAIL' }
-    $results.Add(@{ name=$name; status=$status; expectedVisible=$expected; actualVisible=$actual; position=$position; positionUnchanged=$positionUnchanged })
+    $results.Add(@{ name=$name; status=$status; expectedVisible=$expected; actualVisible=$actual; position=$position; positionUnchanged=$positionUnchanged; nativeState=[NativeCursorTest]::CursorState() })
     if($expected) { $script:lastVisiblePosition=$position }
     Write-Host "$status $name"
     if($status -eq 'FAIL') { throw "$name failed (visible=$actual, positionUnchanged=$positionUnchanged)" }

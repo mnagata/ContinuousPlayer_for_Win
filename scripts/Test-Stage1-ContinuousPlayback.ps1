@@ -1,5 +1,6 @@
 # Focused regression for the per-file MediaPlayer replacement introduced in stage 1.
 # Its unique fixture registration is removed on exit; user files are unchanged.
+param([ValidateRange(0,45)][int]$HoldFinalInfoSeconds=0)
 $ErrorActionPreference='Stop'
 $PSNativeCommandUseErrorActionPreference=$false
 $repo=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
@@ -79,6 +80,7 @@ try{
     $replayScreenshot=Join-Path $artifacts 'final-replay.png'
     Start-Sleep -Seconds 1
     UI @('screenshot','--capture-screen','--output',$replayScreenshot,'--json') -Window $mainHwnd | Out-Null
+    if($HoldFinalInfoSeconds){Write-Host "HOLD final information for capture comparison: PID=$appPid; ReportDirectory=$artifacts";Start-Sleep -Seconds $HoldFinalInfoSeconds}
     UI @('send-keys','i','--via','send-input') | Out-Null
     UI @('wait-for','MediaInfoText','--gone','-t','3000') | Out-Null
     UI @('send-keys','h','--via','send-input') | Out-Null;Wait 'ChooseFolder'

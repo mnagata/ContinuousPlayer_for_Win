@@ -71,6 +71,8 @@ dotnet run --project .\tests\ContinuousPlayer.Core.Tests
 .\scripts\Test-Stage3.ps1   # 上下操作部、全画面、サイズ変更、動画の表示制御
 .\scripts\Test-Stage4.ps1   # 境界、追加・登録・解除、表示名、制御DLNAの遅延取消
 .\scripts\Test-Stage5.ps1   # 手入力接続・再指定・再起動、通信断と位置復旧（制御HTTP）
+.\scripts\Test-Stage6.ps1   # Debug/Release・各段階・全体UI・カーソルを直列実行
+.\scripts\Test-Stage6.ps1 -Suite Release,Stage3 # 選択したバッチだけ確認
 # カーソル検証: 60秒以上の動画1本のみを置いた専用フォルダーと、起動中アプリのPIDを指定
 .\scripts\Test-Cursor.ps1 -AppPid 1234 -VideoPath C:\TestVideo\sample.mp4
 ```
@@ -78,6 +80,8 @@ dotnet run --project .\tests\ContinuousPlayer.Core.Tests
 共通ロジックのテストは追加テストフレームワークなしで実行できます。整列・列挙・キュー境界・永続化・XML・ローカルHTTPサーバーによるSOAP/ページ分割を検証します。NAS実機での探索・再生と、物理タッチパネルでの確認は別途必要です。
 
 共通仕様への移行状況は[改修計画](docs/common-spec-migration-plan.md)と[受入確認表](docs/common-spec-acceptance.md)に記録します。第1段階のUIスクリプトはPC全体をロック・スリープさせず、対象アプリへの通知注入で中断処理を確認します。実際のロック・スリープ・音声機器切断の実機確認とは区別してください。
+
+第6段階の確認方法と実機チェックリストは[総合受入記録](docs/common-spec-stage6-acceptance.md)を参照してください。機能自動試験・画像確認・実機受入を分けて扱います。情報画面の描画欠け・カーソル単独試験・実機未確認が残っており、共通仕様全体の受入完了にはしていません。
 
 ## Windows版の範囲
 

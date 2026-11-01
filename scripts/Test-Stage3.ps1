@@ -24,7 +24,7 @@ function State([string]$Label){UI @('wait-for','Resume','-p','Name','--value',$L
 function Enabled([string]$Name,[bool]$Value){UI @('wait-for',$Name,'-p','IsEnabled','--value',"$Value",'-t','5000') | Out-Null}
 function Nodes($items){foreach($item in $items){if($null -ne $item){$item;Nodes $item.children}}}
 function Inspect{$t=UI @('inspect','--json','-d','12') | ConvertFrom-Json;@(Nodes @($t.windows | ForEach-Object {$_.elements}))}
-function Case([string]$Name,[scriptblock]$Action){try{& $Action | Out-Null;$results.Add(@{name=$Name;status='PASS'});Write-Host "PASS $Name"}catch{$results.Add(@{name=$Name;status='FAIL';detail="$_"});throw}}
+function Case([string]$Name,[scriptblock]$Action){try{& $Action | Out-Null;$results.Add(@{name=$Name;status='PASS'});Write-Host "PASS $Name"}catch{$results.Add(@{name=$Name;status='FAIL';detail="$_"});try{Capture 'failure'}catch{};throw}}
 function Capture([string]$Name){$p=Join-Path $artifacts "$Name.png";UI @('screenshot','--output',$p,'--json') -Window ([string]$hwnd) | Out-Null;if(!(Test-Path -LiteralPath $p) -or !(Get-Item -LiteralPath $p).Length){throw 'Screenshot missing.'};$screenshots.Add($p)}
 function Info([string]$Name){Keys 'i';Wait 'MediaInfoText';$v=UI @('get-value','MediaInfoText','--json') | ConvertFrom-Json;if($v.text -notmatch '再生位置: (\d{2}:\d{2}:\d{2})'){throw 'Position missing.'};$r=@{name=$Name;file=([string]$v.text -split "`n")[0];seconds=[TimeSpan]::Parse($Matches[1]).TotalSeconds;text=$v.text};$observations.Add($r);$r}
 function CloseInfo{Keys 'i';UI @('wait-for','MediaInfoText','--gone','-t','5000') | Out-Null;UI @('wait-for','PlaybackFolder','-p','IsEnabled','--value','True','-t','5000') | Out-Null}
@@ -137,7 +137,10 @@ try {
     }
     Case 'S22: video mouse inactivity hides cursor and chrome, movement restores both' {
         [Stage3Native]::KeyPress($hwnd,32);[Stage3Native]::Move($hwnd);Start-Sleep -Milliseconds 200
-        if(![Stage3Native]::Visible($hwnd)){throw 'Movement did not restore cursor.'};Capture '09-video-active'
+        $cursorWait=[Diagnostics.Stopwatch]::StartNew()
+        while(![Stage3Native]::Visible($hwnd) -and $cursorWait.Elapsed.TotalSeconds -lt 2){Start-Sleep -Milliseconds 100}
+        $observations.Add(@{name='cursor-after-resume-move';state=[Stage3Native]::CursorState();waitSeconds=$cursorWait.Elapsed.TotalSeconds})
+        if(![Stage3Native]::Visible($hwnd)){throw "Movement did not restore cursor: $([Stage3Native]::CursorState())"};Capture '09-video-active'
         $before=[Stage3Native]::Position();Start-Sleep -Seconds 4
         if([Stage3Native]::Visible($hwnd)){throw 'Idle cursor remained visible.'}
         if([Stage3Native]::Position() -ne $before){throw 'Cursor moved while hiding.'};Capture '10-video-idle'
