@@ -43,7 +43,7 @@ public sealed partial class MainPage
             var stamp = playbackState.Stamp;
             Home.Visibility = Visibility.Collapsed;
             Playback.Visibility = Visibility.Visible;
-            ((MainWindow)App.Window).SetFullscreen(true);
+            UpdateFullscreenButtons();
             try { displayRequest.RequestActive(); displayActive = true; }
             catch (Exception ex) { Debug.WriteLine(ex); }
             // Keep the browser until the black playback surface has been laid out.
@@ -103,10 +103,11 @@ public sealed partial class MainPage
         Player.SetMediaPlayer(player);
         interruptionMonitor?.TrackAudioOutput(player.AudioDevice?.Id, true);
         Vm.FileName = current.Name;
-        Vm.MediaInfo = $"{System.IO.Path.GetFileNameWithoutExtension(current.Name)}\n{FormatSize(current.Size)}";
+        Vm.PlaybackTitle = PlaybackPresentation.Title(current.Name);
+        Vm.MediaInfo = "映像形式: 取得できません\n音声形式: 取得できません";
         Vm.PlaybackStatus = "読み込み中…";
         AudioTitle.Visibility = Visibility.Collapsed;
-        PauseToolbar.Visibility = userPaused ? Visibility.Visible : Visibility.Collapsed;
+        UpdatePlaybackButtons();
         UpdateCursorAutoHide();
         try
         {
@@ -161,18 +162,19 @@ public sealed partial class MainPage
         Vm.PlaybackStatus = "";
         AudioTitle.Visibility = session.NaturalVideoWidth == 0 ? Visibility.Visible : Visibility.Collapsed;
         var duration = session.NaturalDuration;
-        Vm.MediaInfo = $"{System.IO.Path.GetFileNameWithoutExtension(queue.Current!.Name)}\n{FormatSize(queue.Current.Size)} · {duration:hh\\:mm\\:ss}";
+        Vm.MediaInfo = session.NaturalVideoWidth == 0 ? "映像形式: 映像なし" : "映像形式: 取得できません";
         if (playbackItem?.VideoTracks.Count > 0)
         {
             var video = playbackItem.VideoTracks[0].GetEncodingProperties();
             var fps = video.FrameRate.Denominator > 0 ? video.FrameRate.Numerator / (double)video.FrameRate.Denominator : 0;
-            Vm.MediaInfo += $"\n{video.Subtype} · {video.Width} × {video.Height}" + (fps > 0 ? $" · {fps:0.###} fps" : "");
+            Vm.MediaInfo = $"映像形式: {Known(video.Subtype)} · {video.Width} × {video.Height}" + (fps > 0 ? $" · {fps:0.###} fps" : " · フレームレート: 取得できません");
         }
         if (playbackItem?.AudioTracks.Count > 0)
         {
             var audio = playbackItem.AudioTracks[0].GetEncodingProperties();
-            Vm.MediaInfo += $"\n{audio.Subtype} · {audio.SampleRate:N0} Hz · {audio.ChannelCount} ch";
+            Vm.MediaInfo += $"\n音声形式: {Known(audio.Subtype)} · {audio.SampleRate:N0} Hz · {audio.ChannelCount} ch";
         }
+        else Vm.MediaInfo += "\n音声形式: 取得できません";
         var updater = sender.SystemMediaTransportControls.DisplayUpdater;
         updater.Type = session.NaturalVideoWidth == 0 ? MediaPlaybackType.Music : MediaPlaybackType.Video;
         if (updater.Type == MediaPlaybackType.Music) updater.MusicProperties.Title = Vm.FileName;
@@ -191,7 +193,7 @@ public sealed partial class MainPage
         }
         if (userPaused) return;
         if (queue.Move(1)) await LoadCurrentAsync();
-        else { playbackState.End(); ApplyPlaybackState(true); Vm.PlaybackStatus = "すべてのファイルの再生が終了しました。"; }
+        else { playbackState.End(); Vm.PlaybackStatus = "最後まで再生しました"; ApplyPlaybackState(true); }
     });
 
     private void Player_MediaFailed(MediaPlayer sender, MediaPlayerFailedEventArgs args) => DispatcherQueue.TryEnqueue(async () =>
@@ -273,7 +275,7 @@ public sealed partial class MainPage
         if (!isPlayback || disposed) return;
         playbackState.Fail();
         ApplyPlaybackState();
-        Vm.PlaybackStatus = "再生できませんでした。Iキーで情報を確認するか、フォルダーから別のファイルを選択してください。";
+        Vm.PlaybackStatus = "再生できませんでした";
         if (dialogOpen || BrowserOverlay.Visibility == Visibility.Visible)
         {
             pendingFailure = (message, code);
@@ -302,9 +304,10 @@ public sealed partial class MainPage
         var saved = playbackState.Suspend(mediaPlayer.PlaybackSession.Position);
         ApplyPlaybackState();
         var output = mediaPlayer.AudioDevice?.Name ?? "Windows既定の再生デバイス";
-        var text = new TextBlock { Text = $"{Vm.FileName}\n\n{Vm.MediaInfo}\n再生位置: {saved.Position:hh\\:mm\\:ss}\n\n{queue.Index + 1} / {queue.Items.Count}\n音声出力: {output}\n再生基盤: Windows MediaPlayer\n音声: Windows標準ミキサー（共有モード）\nBit-Perfect / WASAPI排他出力: 未対応\n\n左右タップ: ±10秒 / 中央タップ: 再生切り替え\n左スワイプ: 次 / 右スワイプ: 前\nEsc: 再生元フォルダー / F11: 全画面切り替え", TextWrapping = TextWrapping.Wrap, IsTextSelectionEnabled = true };
+        var duration = mediaPlayer.PlaybackSession.NaturalDuration;
+        var text = new TextBlock { Text = $"{Vm.FileName}\n\nファイル\n名前: {Vm.FileName}\nサイズ: {FormatSize(queue.Current?.Size ?? -1)}\n長さ: {(duration > TimeSpan.Zero ? duration.ToString(@"hh\:mm\:ss") : "取得できません")}\n再生位置: {saved.Position:hh\\:mm\\:ss}\n{queue.Index + 1} / {queue.Items.Count}\n\n映像・音声形式\n{Vm.MediaInfo}\n\n音声出力\n出力先: {output}\n再生基盤: Windows MediaPlayer\n音声: Windows標準ミキサー（共有モード）\nBit-Perfect / WASAPI排他出力: 未対応", TextWrapping = TextWrapping.Wrap, IsTextSelectionEnabled = true };
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetAutomationId(text, "MediaInfoText");
-        var dialog = new ContentDialog { XamlRoot = XamlRoot, RequestedTheme = ElementTheme.Dark, Title = "再生情報",
+        var dialog = new ContentDialog { XamlRoot = XamlRoot, RequestedTheme = ElementTheme.Dark, Title = "メディア情報",
             Content = new ScrollViewer { MaxHeight = 400, Content = text }, CloseButtonText = "閉じる" };
         dialog.AddHandler(KeyDownEvent, new KeyEventHandler((_, e) =>
         {
@@ -355,7 +358,7 @@ public sealed partial class MainPage
         PauseToolbar.Visibility = Visibility.Collapsed;
         Home.Visibility = Visibility.Visible;
         Vm.PlaybackStatus = "";
-        if (!disposed) ((MainWindow)App.Window).SetFullscreen(false);
+        UpdateFullscreenButtons();
     }
 
     private void ReleasePlayer()
@@ -380,7 +383,8 @@ public sealed partial class MainPage
         playbackItem = null;
     }
 
-    private static string FormatSize(long bytes) => bytes < 0 ? "サイズ不明" : bytes >= 1024 * 1024 * 1024 ? $"{bytes / (1024.0 * 1024 * 1024):F2} GB" : $"{bytes / (1024.0 * 1024):F1} MB";
+    private static string Known(string? value) => string.IsNullOrWhiteSpace(value) ? "取得できません" : value;
+    private static string FormatSize(long bytes) => bytes < 0 ? "取得できません" : bytes >= 1024 * 1024 * 1024 ? $"{bytes / (1024.0 * 1024 * 1024):F2} GB" : $"{bytes / (1024.0 * 1024):F1} MB";
 
     private void Surface_Pressed(object sender, PointerRoutedEventArgs e)
     {
@@ -406,6 +410,8 @@ public sealed partial class MainPage
         TouchSurface.ReleasePointerCapture(e.Pointer);
         e.Handled = true;
         await ExecutePlaybackCommandAsync(command);
+        if (e.Pointer.PointerDeviceType == Microsoft.UI.Input.PointerDeviceType.Touch && command == PlaybackCommand.Toggle && !userPaused)
+            HidePlaybackChromeIfAllowed();
     }
 
     private void Surface_Canceled(object sender, PointerRoutedEventArgs e) => gestures.Cancel(e.Pointer.PointerId);

@@ -68,11 +68,15 @@ public sealed partial class MainWindow : Window
     private static extern uint GetDpiForWindow(nint hwnd);
 
     public void ToggleFullscreen() => SetFullscreen(AppWindow.Presenter.Kind != AppWindowPresenterKind.FullScreen);
+    public bool IsFullscreen => AppWindow.Presenter.Kind == AppWindowPresenterKind.FullScreen;
+    public event EventHandler? FullscreenChanged;
+    private void Fullscreen_Click(object sender, RoutedEventArgs e) => ToggleFullscreen();
 
     public void SetFullscreen(bool fullscreen)
     {
         if ((AppWindow.Presenter.Kind == AppWindowPresenterKind.FullScreen) == fullscreen) return;
         AppWindow.SetPresenter(fullscreen ? AppWindowPresenterKind.FullScreen : AppWindowPresenterKind.Overlapped);
         AppTitleBar.Visibility = fullscreen ? Visibility.Collapsed : Visibility.Visible;
+        FullscreenChanged?.Invoke(this, EventArgs.Empty);
     }
 }

@@ -93,7 +93,6 @@ Start-Sleep -Milliseconds 300
 Start-Sleep -Milliseconds 800
 Key 13
 Start-Sleep -Milliseconds 2000
-[NativeCursorTest]::ClickLeft($w)
 Start-Sleep -Milliseconds 300
 [NativeCursorTest]::Move($w)
 Start-Sleep -Milliseconds 200

@@ -24,7 +24,7 @@ function Inspect([string]$Window) {
     $tree = UI @('inspect','--json','-d','12') -Window $Window | ConvertFrom-Json
     @(Elements @($tree.windows | ForEach-Object { $_.elements }))
 }
-function Wait([string]$Selector) { UI @('wait-for', $Selector, '-t', '5000') | Out-Null }
+function Wait([string]$Selector) { if($Selector -eq 'Resume'){ UI @('wait-for','Resume','-p','Name','--value','再生','-t','5000') | Out-Null; return }; UI @('wait-for', $Selector, '-t', '5000') | Out-Null }
 function Capture([string]$Name) {
     $path = Join-Path $ArtifactDirectory ($Name + '.png')
     UI @('screenshot','--output',$path,'--json') -Window $script:mainHwnd | Out-Null
@@ -65,7 +65,7 @@ try {
     $initial = Inspect
     if ($initial.automationId -contains 'PlayerHome') { UI @('invoke','PlayerHome') | Out-Null }
     elseif ($initial.automationId -contains 'BrowserCancel') { UI @('invoke','BrowserCancel') | Out-Null }
-    Case 'Home controls and screenshot' { Wait 'ChooseFolder'; Wait 'ExitHome'; UI @('focus','ChooseFolder'); Capture '01-home' }
+    Case 'Home controls and screenshot' { Wait 'ChooseFolder'; UI @('wait-for','ExitHome','--gone','-t','2000'); UI @('focus','ChooseFolder'); Capture '01-home' }
     Case 'Folder browser opens without launching a picker' {
         UI @('invoke','ChooseFolder'); Wait 'BrowserList'
         UI @('wait-for','ChooseFolder','-p','IsEnabled','--value','False','-t','2000')
@@ -97,6 +97,7 @@ try {
         UI @('send-keys','space','--via','send-input'); Wait 'Resume'; Capture '06-paused'
     }
     Case 'Toolbar arrows move focus; surface arrows select files while paused' {
+        UI @('focus','PlaybackFolder')
         UI @('send-keys','right','--via','send-input')
         UI @('wait-for','PlaybackInfo','-p','HasKeyboardFocus','--value','True','-t','3000')
         UI @('focus','TouchSurface')
@@ -107,7 +108,7 @@ try {
         UI @('touch','VideoPlayer','-g','swipe','--direction','right','--distance','240'); Wait 'Sample ED.wav'
     }
     Case 'Center touch resumes and pauses' {
-        UI @('touch','VideoPlayer','-g','tap'); UI @('wait-for','Resume','--gone','-t','3000')
+        UI @('touch','VideoPlayer','-g','tap'); UI @('wait-for','Resume','-p','Name','--value','一時停止','-t','3000')
         Start-Sleep -Milliseconds 1000 # Deliberate separate taps, outside the double-tap window.
         UI @('touch','VideoPlayer','-g','tap'); Wait 'Resume'
     }
@@ -118,7 +119,7 @@ try {
         Wait 'Sample OP2.wav'; Wait 'Resume'
     }
     Case 'Keyboard toolbar navigation and media information' {
-        UI @('focus','Resume'); UI @('send-keys','tab enter','--via','send-input'); Wait 'CloseButton'
+        UI @('focus','PlaybackInfo'); UI @('send-keys','enter','--via','send-input'); Wait 'CloseButton'
         $text = (Inspect | Where-Object { $_.type -eq 'Text' } | ForEach-Object { $_.name }) -join "`n"
         if ($text -notmatch '8,?000 Hz' -or $text -notmatch 'Bit-Perfect') { throw 'Audio metadata missing.' }
         Capture '07-info'; UI @('invoke','CloseButton')

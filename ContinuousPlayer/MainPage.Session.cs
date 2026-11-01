@@ -18,7 +18,7 @@ public sealed partial class MainPage
     private void SetPlaybackInputEnabled(bool enabled)
     {
         TouchSurface.IsEnabled = enabled;
-        foreach (var button in PauseToolbar.Children.OfType<Control>()) button.IsEnabled = enabled;
+        UpdatePlaybackButtons();
     }
 
     private void ApplyPlaybackState(bool focus = false)
@@ -31,7 +31,7 @@ public sealed partial class MainPage
                 expectedEnginePause = true;
             mediaPlayer.Pause();
         }
-        PauseToolbar.Visibility = userPaused ? Visibility.Visible : Visibility.Collapsed;
+        UpdatePlaybackButtons();
         UpdateTransportState();
         UpdateCursorAutoHide();
         if (focus && !dialogOpen && BrowserOverlay.Visibility != Visibility.Visible)

@@ -4,6 +4,7 @@ using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Input;
 using Windows.Media.Playback;
+using ContinuousPlayer.Core;
 
 namespace ContinuousPlayer;
 
@@ -29,9 +30,10 @@ public sealed partial class MainPage
         Root.AddHandler(PointerReleasedEvent, new PointerEventHandler(Cursor_PointerButtonActivity), true);
     }
 
-    private bool CanHidePlaybackCursor => !disposed && windowActive && isPlayback && !userPaused && !dialogOpen &&
-        BrowserOverlay.Visibility != Visibility.Visible && mediaPlayer is { } player &&
-        player.PlaybackSession.PlaybackState == MediaPlaybackState.Playing && player.PlaybackSession.NaturalVideoWidth > 0;
+    private bool CanHidePlaybackCursor => !disposed && windowActive && isPlayback &&
+        PlaybackPresentation.CanAutoHide(mediaPlayer?.PlaybackSession.NaturalVideoWidth > 0, userPaused,
+            dialogOpen || BrowserOverlay.Visibility == Visibility.Visible, ControlsHaveFocus,
+            PointerOverPlaybackButton(), AccessibilityControlsActive);
 
     private void Cursor_PointerButtonActivity(object sender, PointerRoutedEventArgs e)
     {
@@ -54,7 +56,8 @@ public sealed partial class MainPage
     {
         cursorIdleTimer.Stop();
         SetPlaybackCursorHidden(false);
-        if (!CanHidePlaybackCursor) return;
+        if (!isPlayback) return;
+        ShowPlaybackChrome();
         lastMouseActivity = Stopwatch.GetTimestamp();
         lastMousePosition = GetCursorPos(out var point) ? point : null;
         cursorIdleTimer.Start();
@@ -62,7 +65,10 @@ public sealed partial class MainPage
 
     private void CursorIdleTimer_Tick(object? sender, object e)
     {
-        if (!CanHidePlaybackCursor) { UpdateCursorAutoHide(); return; }
+        if (!isPlayback || disposed) { UpdateCursorAutoHide(); return; }
+        if (ForwardButton.IsEnabled != (PlaybackInputAllowed && mediaPlayer?.PlaybackSession.CanSeek == true))
+            UpdatePlaybackButtons();
+        if (!CanHidePlaybackCursor) { ShowPlaybackChrome(); return; }
         if (!PointerIsOverPlayback() || !GetCursorPos(out var point))
         {
             lastMousePosition = null;
@@ -75,9 +81,9 @@ public sealed partial class MainPage
         {
             lastMousePosition = point;
             lastMouseActivity = Stopwatch.GetTimestamp();
-            SetPlaybackCursorHidden(false);
+            ShowPlaybackChrome();
         }
-        else SetPlaybackCursorHidden(Stopwatch.GetElapsedTime(lastMouseActivity) >= CursorIdleDelay);
+        else if (Stopwatch.GetElapsedTime(lastMouseActivity) >= CursorIdleDelay) HidePlaybackChromeIfAllowed();
     }
 
     private void Player_PlaybackStateChanged(MediaPlaybackSession sender, object args) => DispatcherQueue.TryEnqueue(() =>
@@ -103,7 +109,8 @@ public sealed partial class MainPage
                 if (!playbackState.CanPlay) ApplyPlaybackState();
             });
         }
-        UpdateCursorAutoHide();
+        // Buffering is still playback, and must not reveal a pause menu by itself.
+        if (sender.PlaybackState != MediaPlaybackState.Buffering) UpdateCursorAutoHide();
     });
 
     private void DisposeCursorAutoHide()

@@ -32,8 +32,8 @@ function UI([string[]]$Arguments, [string]$Window) {
     $selector = if ($Window) { @('-w',$Window) } else { @('-a',"$AppPid") }
     Invoke-Stage1WinApp (@('ui') + $Arguments + $selector)
 }
-function Wait([string]$Id) { UI @('wait-for',$Id,'-t','5000') | Out-Null }
-function Gone([string]$Id) { UI @('wait-for',$Id,'--gone','-t','5000') | Out-Null }
+function Wait([string]$Id) { if($Id -eq 'Resume'){ UI @('wait-for','Resume','-p','Name','--value','再生','-t','5000') | Out-Null; return }; UI @('wait-for',$Id,'-t','5000') | Out-Null }
+function Gone([string]$Id) { if($Id -eq 'Resume'){ UI @('wait-for','Resume','-p','Name','--value','一時停止','-t','5000') | Out-Null; return }; UI @('wait-for',$Id,'--gone','-t','5000') | Out-Null }
 function Keys([string]$Value) { UI @('send-keys',$Value,'--via','send-input') | Out-Null }
 function Elements($nodes) { foreach($node in $nodes){ if($null -ne $node){$node; Elements $node.children} } }
 function Inspect([string]$Window) {

@@ -1,5 +1,5 @@
 # Local input acceptance batch. Uses valid silent media without registering folders.
-param()
+param([switch]$SkipActivationProbe)
 $ErrorActionPreference='Stop'
 $PSNativeCommandUseErrorActionPreference=$false
 $repo=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
@@ -17,8 +17,8 @@ $observations=[Collections.Generic.List[object]]::new()
 $screenshots=[Collections.Generic.List[string]]::new()
 function Checked([string[]]$Arguments){$r=@(& winapp @Arguments);if($LASTEXITCODE -ne 0){throw "winapp $($Arguments -join ' ') failed: $($r -join "`n")"};$r}
 function UI([string[]]$Arguments,[string]$Window){$target=if($Window){@('-w',$Window)}else{@('-a',"$appPid")};Checked (@('ui')+$Arguments+$target)}
-function Wait([string]$Id){UI @('wait-for',$Id,'-t','5000') | Out-Null}
-function Gone([string]$Id){UI @('wait-for',$Id,'--gone','-t','5000') | Out-Null}
+function Wait([string]$Id){if($Id -eq 'Resume'){UI @('wait-for','Resume','-p','Name','--value','再生','-t','5000') | Out-Null;return};UI @('wait-for',$Id,'-t','5000') | Out-Null}
+function Gone([string]$Id){if($Id -eq 'Resume'){UI @('wait-for','Resume','-p','Name','--value','一時停止','-t','5000') | Out-Null;return};UI @('wait-for',$Id,'--gone','-t','5000') | Out-Null}
 function Keys([string]$Text){UI @('send-keys',$Text,'--via','send-input') | Out-Null}
 function Nodes($items){foreach($item in $items){if($null -ne $item){$item;Nodes $item.children}}}
 function Inspect([string]$Window){$t=UI @('inspect','--json','-d','12') -Window $Window | ConvertFrom-Json;@(Nodes @($t.windows | ForEach-Object {$_.elements}))}
@@ -30,7 +30,7 @@ function Info([string]$Name){
     $v2=@{name=$Name;file=([string]$v.text -split "`n")[0];seconds=[TimeSpan]::Parse($Matches[1]).TotalSeconds}
     $observations.Add($v2);$v2
 }
-function CloseInfo{Keys 'i';Gone 'MediaInfoText'}
+function CloseInfo{Keys 'i';Gone 'MediaInfoText';UI @('wait-for','Resume','-p','IsEnabled','--value','True','-t','5000') | Out-Null}
 function Near([double]$Expected,[double]$Actual,[double]$Tolerance=1){if([math]::Abs($Actual-$Expected) -gt $Tolerance){throw "Position $Actual, expected $Expected +/- $Tolerance"}}
 function VisibleCount{
     $all=Inspect;$list=$all | Where-Object {$_.automationId -eq 'BrowserList'} | Select-Object -First 1
@@ -59,7 +59,8 @@ public static class Stage2Native {
  [StructLayout(LayoutKind.Sequential)] struct Message {public IntPtr Hwnd;public uint Msg;public UIntPtr W;public IntPtr L;public uint Time;public Point Point;public uint Private;}
  static HashSet<ushort> owned=new HashSet<ushort>();static IntPtr probe;static Thread probeThread;
  [DllImport("user32.dll",SetLastError=true)]static extern uint SendInput(uint count,Input[] data,int size);
- [DllImport("user32.dll")]static extern bool SetCursorPos(int x,int y);
+ [DllImport("user32.dll")]static extern bool SetPhysicalCursorPos(int x,int y);
+ public static IntPtr Target;
  [DllImport("user32.dll")]public static extern IntPtr GetForegroundWindow();
  [DllImport("user32.dll")]public static extern uint GetDpiForWindow(IntPtr window);
  [DllImport("user32.dll",CharSet=CharSet.Unicode)]static extern IntPtr CreateWindowExW(uint ex,string cls,string title,uint style,int x,int y,int w,int h,IntPtr parent,IntPtr menu,IntPtr instance,IntPtr param);
@@ -69,9 +70,9 @@ public static class Stage2Native {
  [DllImport("user32.dll")]static extern bool IsWindow(IntPtr h);
  [DllImport("user32.dll")]static extern bool PostMessageW(IntPtr h,uint m,UIntPtr w,IntPtr l);
  static void Send(params Input[] data){if(IntPtr.Size!=8 || SendInput((uint)data.Length,data,40)!=data.Length)throw new Exception("Synthetic input was not delivered.");}
- public static void Down(ushort key){owned.Add(key);Send(new Input{Type=1,Key=new Key{Vk=key}});}
+ public static void Down(ushort key){if(GetForegroundWindow()!=Target)throw new Exception("Target lost foreground");owned.Add(key);Send(new Input{Type=1,Key=new Key{Vk=key}});}
  public static void Up(ushort key){Send(new Input{Type=1,Key=new Key{Vk=key,Flags=2}});owned.Remove(key);}
- public static void Click(int x,int y){SetCursorPos(x,y);Send(new Input{Mouse=new Mouse{Flags=2}},new Input{Mouse=new Mouse{Flags=4}});}
+ public static void Click(int x,int y){var foreground=GetForegroundWindow();if(foreground!=Target && (probe==IntPtr.Zero || foreground!=probe))throw new Exception("Target lost foreground");if(!SetPhysicalCursorPos(x,y))throw new Exception("Physical cursor move failed");Send(new Input{Mouse=new Mouse{Flags=2}},new Input{Mouse=new Mouse{Flags=4}});}
  public static void Release(){foreach(var key in new List<ushort>(owned))Up(key);}
  public static IntPtr OpenProbe(){var ready=new ManualResetEventSlim();probeThread=new Thread(()=>{probe=CreateWindowExW(0,"STATIC","Stage2 activation probe",0x10CF0000,100,100,300,160,IntPtr.Zero,IntPtr.Zero,IntPtr.Zero,IntPtr.Zero);CreateWindowExW(0,"BUTTON","Activate probe",0x50010000,20,20,220,60,probe,IntPtr.Zero,IntPtr.Zero,IntPtr.Zero);ready.Set();while(IsWindow(probe)){Message m;while(PeekMessageW(out m,IntPtr.Zero,0,0,1)){TranslateMessage(ref m);DispatchMessageW(ref m);}Thread.Sleep(5);}});probeThread.IsBackground=true;probeThread.SetApartmentState(ApartmentState.STA);probeThread.Start();if(!ready.Wait(5000)||probe==IntPtr.Zero)throw new Exception("No test focus window.");return probe;}
  public static void CloseProbe(){if(probe!=IntPtr.Zero)PostMessageW(probe,0x10,UIntPtr.Zero,IntPtr.Zero);if(probeThread!=null)probeThread.Join(1000);probe=IntPtr.Zero;}
@@ -88,6 +89,7 @@ try{
     Wait 'ChooseFolder';UI @('wait-for','ChooseFolder','-p','IsEnabled','--value','True','-t','10000') | Out-Null
     $main=@(UI @('list-windows','--json') | ConvertFrom-Json) | Where-Object {$_.processId -eq $appPid -and $_.ownerHwnd -eq 0} | Select-Object -First 1
     $hwnd=[IntPtr]::new([long]$main.hwnd)
+    [Stage2Native]::Target=$hwnd
     UI @('focus','ChooseFolder') | Out-Null
     UI @('invoke','ChooseFolder') | Out-Null;Wait 'BrowserList'
     UI @('click','フォルダーを追加') | Out-Null;Wait 'PC / ローカルフォルダー';UI @('click','PC / ローカルフォルダー') | Out-Null
@@ -107,7 +109,7 @@ try{
         Keys 'enter';Wait 'VideoPlayer';Gone 'Resume';Keys 'space';Wait 'Resume'
     }
     Case 'S13: toolbar arrows move focus and Enter activates that button' {
-        UI @('focus','Resume') | Out-Null;Keys 'right'
+        UI @('focus','PlaybackFolder') | Out-Null;Keys 'right'
         UI @('wait-for','PlaybackInfo','-p','HasKeyboardFocus','--value','True','-t','3000') | Out-Null
         Capture '02-toolbar-focus';Keys 'enter';Wait 'MediaInfoText';CloseInfo;Wait 'Resume'
     }
@@ -161,7 +163,9 @@ try{
         Keys 'h';Keys 'o';Capture '03-information';CloseInfo
         $after=Info 'modal-after';if($value.file -ne $after.file){throw 'Modal input reached playback.'};Near $value.seconds $after.seconds;CloseInfo
     }
-    Case 'S15: inactive first click only activates; a second click toggles playback' {
+    if($SkipActivationProbe){
+        $results.Add(@{name='S15: inactive first click';status='SKIP';detail='Explicitly excluded: helper activation was previously blocked by the foreground guard. Physical click acceptance remains unverified.'})
+    }else{ Case 'S15: inactive first click only activates; a second click toggles playback' {
         $probe=[Stage2Native]::OpenProbe()
         try{
             UI @('focus','Activate probe') -Window ([string]$probe.ToInt64()) | Out-Null
@@ -171,7 +175,7 @@ try{
             Wait 'Resume'
             [Stage2Native]::Click($leftX,$y);Gone 'Resume';Keys 'space';Wait 'Resume'
         }finally{[Stage2Native]::CloseProbe()}
-    }
+    }}
 }catch{if(!$results.Count -or $results[$results.Count-1].status -ne 'FAIL'){$results.Add(@{name='Setup / execution';status='FAIL';detail="$_"})};Write-Host "FAIL $_"}
 finally{
     [Stage2Native]::Release();[Stage2Native]::CloseProbe()
@@ -180,6 +184,8 @@ finally{
     $env:WINAPP_UI_WORKFLOW_ID=$priorWorkflow;$env:DOTNET_CLI_TELEMETRY_OPTOUT=$priorTelemetry
 }
 $failed=@($results | Where-Object {$_.status -eq 'FAIL'}).Count
-@{target='local';appPid=$appPid;passed=$results.Count-$failed;failed=$failed;results=@($results.ToArray());observations=@($observations.ToArray());screenshots=@($screenshots.ToArray());fixture=$fixture;registeredFolders=$false} | ConvertTo-Json -Depth 7 | Set-Content -LiteralPath (Join-Path $artifacts 'results.json') -Encoding utf8
-Write-Host "Passed: $($results.Count-$failed); Failed: $failed; Report: $artifacts\results.json"
+$passed=@($results | Where-Object {$_.status -eq 'PASS'}).Count
+$skipped=@($results | Where-Object {$_.status -eq 'SKIP'}).Count
+@{target='local';appPid=$appPid;passed=$passed;failed=$failed;skipped=$skipped;results=@($results.ToArray());observations=@($observations.ToArray());screenshots=@($screenshots.ToArray());fixture=$fixture;registeredFolders=$false} | ConvertTo-Json -Depth 7 | Set-Content -LiteralPath (Join-Path $artifacts 'results.json') -Encoding utf8
+Write-Host "Passed: $passed; Failed: $failed; Skipped: $skipped; Report: $artifacts\results.json"
 if($failed){exit 1}

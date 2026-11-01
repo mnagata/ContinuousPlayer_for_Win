@@ -21,6 +21,7 @@ public sealed partial class MainPage : Page
         InitializeComponent();
         InitializeCursorAutoHide();
         InitializeInput();
+        InitializePlaybackChrome();
     }
 
     private async void Page_Loaded(object sender, RoutedEventArgs e)
@@ -30,6 +31,8 @@ public sealed partial class MainPage : Page
         ChooseButton.IsEnabled = false;
         App.Window.Closed += (_, _) => Cleanup();
         App.Window.Activated += Window_Activated;
+        ((MainWindow)App.Window).FullscreenChanged += Window_FullscreenChanged;
+        UpdateFullscreenButtons();
         try
         {
             interruptionMonitor = new(App.Window, PlaybackInterruptionChanged);
@@ -62,13 +65,16 @@ public sealed partial class MainPage : Page
         BrowserOverlay.Padding = new Thickness(compact ? 12 : 24);
         BrowserCard.Padding = new Thickness(compact ? 12 : 20);
         BrowserHint.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
-        PortraitInfo.Visibility = e.NewSize.Height > e.NewSize.Width ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private async void Choose_Click(object sender, RoutedEventArgs e) => await OpenLibraryAsync();
-    private void Exit_Click(object sender, RoutedEventArgs e) => App.Window.Close();
     private async void Home_Click(object sender, RoutedEventArgs e) => await ExecutePlaybackCommandAsync(PlaybackCommand.Home);
-    private async void Resume_Click(object sender, RoutedEventArgs e) => await ExecutePlaybackCommandAsync(PlaybackCommand.Play);
+    private async void Resume_Click(object sender, RoutedEventArgs e) => await ExecutePlaybackCommandAsync(PlaybackCommand.Toggle);
+    private async void Previous_Click(object sender, RoutedEventArgs e) => await ExecutePlaybackCommandAsync(PlaybackCommand.Previous);
+    private async void Next_Click(object sender, RoutedEventArgs e) => await ExecutePlaybackCommandAsync(PlaybackCommand.Next);
+    private async void Rewind_Click(object sender, RoutedEventArgs e) => await ExecutePlaybackCommandAsync(PlaybackCommand.SeekBackward);
+    private async void Forward_Click(object sender, RoutedEventArgs e) => await ExecutePlaybackCommandAsync(PlaybackCommand.SeekForward);
+    private void Fullscreen_Click(object sender, RoutedEventArgs e) => ((MainWindow)App.Window).ToggleFullscreen();
     private async void Info_Click(object sender, RoutedEventArgs e) => await ExecutePlaybackCommandAsync(PlaybackCommand.Information);
     private async void PlaybackFolder_Click(object sender, RoutedEventArgs e) => await ExecutePlaybackCommandAsync(PlaybackCommand.Files);
 
@@ -122,13 +128,14 @@ public sealed partial class MainPage : Page
             return;
         }
         if (IsKeyDown(VirtualKey.Menu)) return;
+        if (isPlayback && e.Key == VirtualKey.Tab) ShowPlaybackChrome();
         if (e.KeyStatus.WasKeyDown)
         {
             if (isPlayback && InputKey(e.Key) != PlaybackInputKey.Other) e.Handled = true;
             return;
         }
         if (!isPlayback) return;
-        var toolbarFocus = IsWithin(focused, PauseToolbar) && userPaused;
+        var toolbarFocus = IsWithin(focused, PauseToolbar);
         if (toolbarFocus && e.Key is VirtualKey.Left or VirtualKey.Right or VirtualKey.Up or VirtualKey.Down)
         {
             MoveToolbarFocus(e.Key);
@@ -165,6 +172,7 @@ public sealed partial class MainPage : Page
         interruptionMonitor = null;
         inputMonitor?.Dispose();
         inputMonitor = null;
+        ((MainWindow)App.Window).FullscreenChanged -= Window_FullscreenChanged;
         DisposeCursorAutoHide();
         dlna.Dispose();
     }

@@ -10,6 +10,7 @@ public partial class MainPageViewModel : ObservableObject
     [ObservableProperty] public partial string BrowserTitle { get; set; } = "保存済みフォルダー";
     [ObservableProperty] public partial string EmptyMessage { get; set; } = "";
     [ObservableProperty] public partial string FileName { get; set; } = "";
+    [ObservableProperty] public partial string PlaybackTitle { get; set; } = "";
     [ObservableProperty] public partial string MediaInfo { get; set; } = "";
     [ObservableProperty] public partial string PlaybackStatus { get; set; } = "";
 }

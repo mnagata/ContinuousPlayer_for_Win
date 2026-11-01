@@ -22,6 +22,9 @@
             <TitleBar.IconSource>
                 <ImageIconSource ImageSource="Assets/AppIcon.ico" />
             </TitleBar.IconSource>
+            <TitleBar.RightHeader>
+                <Button Click="Fullscreen_Click" Width="48" Height="40" AutomationProperties.AutomationId="WindowFullscreen" AutomationProperties.Name="全画面にする" ToolTipService.ToolTip="全画面にする (F11)"><FontIcon Glyph="&#xE740;"/></Button>
+            </TitleBar.RightHeader>
         </TitleBar>
 
         <!--

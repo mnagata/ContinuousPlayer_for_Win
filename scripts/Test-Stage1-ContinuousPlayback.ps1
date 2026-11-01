@@ -17,7 +17,7 @@ $replayScreenshot=$null
 $errorText=$null
 function Checked([string[]]$Arguments){$r=@(& winapp @Arguments);if($LASTEXITCODE -ne 0){throw "winapp $($Arguments -join ' ') failed: $($r -join "`n")"};$r}
 function UI([string[]]$Arguments,[string]$Window){$target=if($Window){@('-w',$Window)}else{@('-a',"$appPid")};Checked (@('ui')+$Arguments+$target)}
-function Wait([string]$Selector){UI @('wait-for',$Selector,'-t','5000') | Out-Null}
+function Wait([string]$Selector){if($Selector -eq 'Resume'){UI @('wait-for','Resume','-p','Name','--value','再生','-t','5000') | Out-Null;return};UI @('wait-for',$Selector,'-t','5000') | Out-Null}
 function Nodes($items){foreach($item in $items){if($null -ne $item){$item;Nodes $item.children}}}
 try{
     & (Join-Path $PSScriptRoot 'New-TestMedia.ps1') -Directory $media | Out-Null
@@ -39,11 +39,16 @@ try{
     UI @('invoke',$button.selector) -Window $pickerHwnd | Out-Null
     Wait 'Sample OP.wav';UI @('click','Sample OP.wav') | Out-Null;Wait 'VideoPlayer'
     Start-Sleep -Milliseconds 800
+    UI @('focus','TouchSurface') | Out-Null
     UI @('send-keys','down down down down','--via','send-input') | Out-Null
+    UI @('send-keys','i','--via','send-input') | Out-Null;Wait 'MediaInfoText'
+    $beforeEnd=UI @('get-value','MediaInfoText','--json') | ConvertFrom-Json
+    if($beforeEnd.text -notmatch '再生位置: 00:00:4[0-3]'){throw "Seek did not reach the natural-end fixture position: $($beforeEnd.text)"}
+    UI @('send-keys','i','--via','send-input') | Out-Null
+    UI @('wait-for','MediaInfoText','--gone','-t','3000') | Out-Null
     # The 45-second source is now near 40 seconds. Let the engine end naturally.
     Start-Sleep -Seconds 7
-    Wait 'Sample ED.wav'
-    UI @('wait-for','Resume','--gone','-t','3000') | Out-Null
+    UI @('wait-for','Resume','-p','Name','--value','一時停止','-t','3000') | Out-Null
     UI @('send-keys','i','--via','send-input') | Out-Null;Wait 'MediaInfoText'
     $info=UI @('get-value','MediaInfoText','--json') | ConvertFrom-Json
     if(([string]$info.text -split "`n")[0] -ne 'Sample ED.wav'){throw 'Natural progression selected the wrong file.'}
@@ -52,12 +57,17 @@ try{
     if(!(Test-Path -LiteralPath $screenshot)){throw 'Screenshot missing.'}
     UI @('send-keys','i','--via','send-input') | Out-Null
     UI @('wait-for','MediaInfoText','--gone','-t','3000') | Out-Null
-    UI @('send-keys','right right','--via','send-input') | Out-Null;Wait 'Sample ED2.wav'
+    UI @('focus','TouchSurface') | Out-Null
+    UI @('send-keys','right right','--via','send-input') | Out-Null
     Start-Sleep -Milliseconds 500
     UI @('send-keys','down down down down','--via','send-input') | Out-Null
     Start-Sleep -Seconds 7
-    Wait 'Resume';UI @('invoke','Resume') | Out-Null
-    UI @('wait-for','Resume','--gone','-t','3000') | Out-Null
+    Wait 'Resume'
+    UI @('wait-for','PlaybackStatus','--value','最後まで再生しました','-t','5000') | Out-Null
+    UI @('invoke','Resume') | Out-Null
+    UI @('wait-for','Resume','-p','Name','--value','一時停止','-t','3000') | Out-Null
+    UI @('wait-for','SeekForward','-p','IsEnabled','--value','True','-t','5000') | Out-Null
+    Start-Sleep -Milliseconds 800
     UI @('send-keys','i','--via','send-input') | Out-Null;Wait 'MediaInfoText'
     $replay=UI @('get-value','MediaInfoText','--json') | ConvertFrom-Json
     if($replay.text -notmatch '再生位置: 00:00:0[0-4]'){throw 'Explicit replay did not restart at zero.'}
@@ -76,7 +86,7 @@ finally{
         if($items.automationId -contains 'MediaInfoText'){UI @('send-keys','i','--via','send-input') | Out-Null;UI @('wait-for','MediaInfoText','--gone','-t','3000') | Out-Null}
         if($items.automationId -contains 'BrowserCancel'){UI @('invoke','BrowserCancel') | Out-Null}
         UI @('send-keys','h','--via','send-input') | Out-Null;Wait 'ChooseFolder'
-        UI @('invoke','ExitHome') | Out-Null
+        (Get-Process -Id $appPid).CloseMainWindow() | Out-Null
     }}catch{if(!$errorText){$errorText="Cleanup: $_"}}
     try{Checked @('ui','yield') | Out-Null}catch{if(!$errorText){$errorText="Release: $_"}}
     $env:WINAPP_UI_WORKFLOW_ID=$previous
