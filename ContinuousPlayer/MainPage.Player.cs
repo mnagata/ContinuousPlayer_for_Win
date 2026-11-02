@@ -496,6 +496,7 @@ public sealed partial class MainPage
         PauseToolbar.Visibility = Visibility.Collapsed;
         Home.Visibility = Visibility.Visible;
         Vm.PlaybackStatus = "";
+        UpdatePlaybackButtons();
         UpdateFullscreenButtons();
     }
 

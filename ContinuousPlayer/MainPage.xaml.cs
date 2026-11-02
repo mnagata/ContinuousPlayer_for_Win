@@ -174,6 +174,12 @@ public sealed partial class MainPage : Page
             keyboardRoot.RemoveHandler(PreviewKeyDownEvent, keyboardHandler);
         keyboardRoot = null;
         keyboardHandler = null;
+        if (captionPointerSource != null)
+        {
+            captionPointerSource.CaptionTapped -= Caption_Tapped;
+            captionPointerSource.ExitedMoveSize -= Caption_ExitedMoveSize;
+            captionPointerSource = null;
+        }
         App.Window.Activated -= Window_Activated;
         activeInfoDialog?.Hide();
         activeConnectionDialog?.Hide();

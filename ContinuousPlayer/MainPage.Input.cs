@@ -12,6 +12,7 @@ public sealed partial class MainPage
     private Interop.PlaybackInputMonitor? inputMonitor;
     private UIElement? keyboardRoot;
     private KeyEventHandler? keyboardHandler;
+    private InputNonClientPointerSource? captionPointerSource;
     private readonly PlaybackGestureRecognizer gestures = new();
     private readonly HashSet<uint> rootTouches = [];
 
@@ -21,6 +22,9 @@ public sealed partial class MainPage
         keyboardRoot = App.Window.Content;
         keyboardHandler = Root_KeyDown;
         keyboardRoot.AddHandler(PreviewKeyDownEvent, keyboardHandler, true);
+        captionPointerSource = InputNonClientPointerSource.GetForWindowId(App.Window.AppWindow.Id);
+        captionPointerSource.CaptionTapped += Caption_Tapped;
+        captionPointerSource.ExitedMoveSize += Caption_ExitedMoveSize;
         Root.AddHandler(PointerPressedEvent, new PointerEventHandler(RootPointerPressed), true);
         Root.AddHandler(PointerReleasedEvent, new PointerEventHandler(RootPointerEnded), true);
         Root.AddHandler(PointerCanceledEvent, new PointerEventHandler(RootPointerEnded), true);
@@ -36,6 +40,21 @@ public sealed partial class MainPage
     {
         if (windowActive && PlaybackInputAllowed && !ControlsHaveKeyboardFocus)
             TouchSurface.Focus(FocusState.Programmatic);
+    }
+
+    private void Caption_Tapped(InputNonClientPointerSource sender, NonClientCaptionTappedEventArgs args) =>
+        RestorePlaybackFocusAfterCaption();
+
+    private void Caption_ExitedMoveSize(InputNonClientPointerSource sender, ExitedMoveSizeEventArgs args) =>
+        RestorePlaybackFocusAfterCaption();
+
+    private void RestorePlaybackFocusAfterCaption()
+    {
+        // Caption input bypasses XAML. Restore island focus after native click/move handling finishes.
+        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+        {
+            if (windowActive && PlaybackInputAllowed) TouchSurface.Focus(FocusState.Programmatic);
+        });
     }
 
     private void RootPointerPressed(object sender, PointerRoutedEventArgs e)

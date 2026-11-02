@@ -1,4 +1,5 @@
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Windowing;
 using System.Runtime.InteropServices;
 using Windows.Graphics;
@@ -20,6 +21,7 @@ public sealed partial class MainWindow : Window
     private readonly AccessibilitySettings accessibility = new();
     private readonly UISettings themeSettings = new();
     private bool initialWindowSizeApplied;
+    private double titleBarActionsOffset;
     public MainWindow()
     {
         InitializeComponent();
@@ -46,6 +48,9 @@ public sealed partial class MainWindow : Window
 
     private void WindowLayout_Loaded(object sender, RoutedEventArgs e)
     {
+        // The native title template explicitly uses CaptionTextBlockStyle, so FontSize does not inherit.
+        if (FindTitleText(AppTitleBar) is { } titleText) titleText.FontSize = 16;
+        DispatcherQueue.TryEnqueue(UpdateTitleBarPosition);
         if (initialWindowSizeApplied || RootFrame.ActualWidth <= 0 || RootFrame.ActualHeight <= 0) return;
         initialWindowSizeApplied = true;
         var scale = GetDpiForWindow(WinRT.Interop.WindowNative.GetWindowHandle(this)) / 96.0;
@@ -56,14 +61,43 @@ public sealed partial class MainWindow : Window
             size.Height + (int)Math.Round((576 - RootFrame.ActualHeight) * scale)));
     }
 
-    public void SetPlaybackTitleBar(UIElement toolbar, bool visible, string title, string status, string? fullName = null)
+    private void TitleBar_SizeChanged(object sender, SizeChangedEventArgs e) =>
+        DispatcherQueue.TryEnqueue(UpdateTitleBarPosition);
+
+    private void UpdateTitleBarPosition()
     {
-        if (!ReferenceEquals(PlaybackTitleBarActions.Content, toolbar)) PlaybackTitleBarActions.Content = toolbar;
+        if (AppTitleBar.Visibility != Visibility.Visible || PlaybackTitleBarActions.ActualWidth <= 0 ||
+            AppTitleBar.XamlRoot is not { } root) return;
+        AppTitleBar.UpdateLayout();
+        var right = PlaybackTitleBarActions.TransformToVisual(AppTitleBar)
+            .TransformPoint(new Windows.Foundation.Point(PlaybackTitleBarActions.ActualWidth, 0)).X;
+        var captionLeft = AppTitleBar.ActualWidth - AppWindow.TitleBar.RightInset / root.RasterizationScale;
+        // Shift by two button widths when space permits, leaving a gap before the native captions.
+        var offset = Math.Clamp(captionLeft - (right - titleBarActionsOffset) - 8, 0, 64);
+        if (Math.Abs(offset - titleBarActionsOffset) > 0.5)
+        {
+            titleBarActionsOffset = offset;
+            PlaybackTitleBarActions.Margin = new Thickness(offset, 0, -offset, 0);
+            AppTitleBar.UpdateLayout();
+        }
+        AppTitleBar.RecomputeDragRegions();
+    }
+
+    private static TextBlock? FindTitleText(DependencyObject element)
+    {
+        if (element is TextBlock { Name: "PART_TitleText" } title) return title;
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(element); i++)
+            if (FindTitleText(VisualTreeHelper.GetChild(element, i)) is { } match) return match;
+        return null;
+    }
+
+    public void SetPlaybackTitleBar(UIElement toolbar, bool visible, string title, string status)
+    {
+        if (!ReferenceEquals(PlaybackToolbarPresenter.Content, toolbar)) PlaybackToolbarPresenter.Content = toolbar;
         toolbar.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
         AppTitleBar.Title = visible ? title : "ContinuousPlayer";
         AppTitleBar.Subtitle = visible ? status : "";
-        Microsoft.UI.Xaml.Controls.ToolTipService.SetToolTip(AppTitleBar, visible ? fullName ?? title : null);
-        if (visible) AppTitleBar.RecomputeDragRegions();
+        if (visible) DispatcherQueue.TryEnqueue(UpdateTitleBarPosition);
     }
 
     private void ThemeSettings_ColorValuesChanged(UISettings sender, object args) => DispatcherQueue.TryEnqueue(UpdateCaptionColors);

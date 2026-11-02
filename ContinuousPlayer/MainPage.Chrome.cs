@@ -19,7 +19,7 @@ public sealed partial class MainPage
     {
         // Mount once, before automation peers are created. Keep each header in a stable parent.
         Root.Children.Remove(WindowedTopToolbar);
-        ((MainWindow)App.Window).SetPlaybackTitleBar(WindowedTopToolbar, false, "", "");
+        UpdatePlaybackToolbarPlacement();
         Vm.PropertyChanged += PlaybackTitleBar_PropertyChanged;
         UpdatePlaybackButtons();
     }
@@ -113,8 +113,11 @@ public sealed partial class MainPage
     private void UpdatePlaybackToolbarPlacement()
     {
         var window = (MainWindow)App.Window;
-        var titleBar = isPlayback && !window.IsFullscreen;
-        window.SetPlaybackTitleBar(WindowedTopToolbar, titleBar, Vm.PlaybackTitle, Vm.PlaybackStatus, Vm.FileName);
+        // Windowed commands stay visible independently of playback and overlay auto-hide.
+        var titleBar = !window.IsFullscreen;
+        window.SetPlaybackTitleBar(WindowedTopToolbar, titleBar,
+            isPlayback ? Vm.PlaybackTitle : "ContinuousPlayer",
+            isPlayback ? Vm.PlaybackStatus : "");
         TopToolbarOverlayHost.Visibility = titleBar ? Visibility.Collapsed : Visibility.Visible;
     }
 

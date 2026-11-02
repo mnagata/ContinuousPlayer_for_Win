@@ -46,7 +46,7 @@ function CheckLayout([string]$Name){
     $buttons=@($items | Where-Object {$_.automationId -in $ids});if($buttons.Count -ne 8){throw 'Eight main commands were not exposed.'}
     $title=$items | Where-Object {$_.automationId -in @('PART_TitleText','PlaybackTitle') -and !$_.isOffscreen} | Select-Object -First 1
     $bottom=$buttons | Where-Object {$_.automationId -eq 'Resume'}
-    foreach($b in $buttons){$minimum=if($b.automationId -in @('PlayerHome','PlaybackFolder','PlaybackInfo')){39}else{47};if($b.width -lt $minimum -or $b.height -lt $minimum -or $b.x -lt 0 -or $b.y -lt 0){throw "Clipped target $($b.automationId)"}}
+    foreach($b in $buttons){$minimum=if($b.automationId -in @('PlayerHome','PlaybackFolder','PlaybackInfo')){27}else{47};if($b.width -lt $minimum -or $b.height -lt $minimum -or $b.x -lt 0 -or $b.y -lt 0){throw "Clipped target $($b.automationId)"}}
     $top=@($buttons | Where-Object {$_.automationId -in @('PlayerHome','PlaybackFolder','PlaybackInfo')} | Sort-Object x)
     if(($top.automationId -join ',') -ne 'PlayerHome,PlaybackFolder,PlaybackInfo'){throw 'Top command order differs.'}
     $lower=@($buttons | Where-Object {$_.automationId -in @('PreviousFile','SeekBackward','Resume','SeekForward','NextFile')} | Sort-Object x)

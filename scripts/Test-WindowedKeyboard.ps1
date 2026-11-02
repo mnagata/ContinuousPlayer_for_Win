@@ -1,7 +1,12 @@
 # Local packaged-app regression for playback focus and window-level shortcuts.
 param(
     [string]$VideoPath = (Join-Path $PSScriptRoot '..\.tools\cursor-media\Cursor test.mp4'),
-    [switch]$LayoutOnly
+    [switch]$LayoutOnly,
+    [switch]$MaximizeOnly,
+    [switch]$OriginalMedia,
+    [ValidateRange(50,10000)][int]$StartupDelayMilliseconds = 1600,
+    [string]$RegisteredRoot,
+    [ValidateRange(0,200)][int]$CaptionClickMilliseconds = 80
 )
 $ErrorActionPreference='Stop'
 $PSNativeCommandUseErrorActionPreference=$false
@@ -29,6 +34,14 @@ function Fresh([string]$Id){
 }
 function Keys([string]$Value){UI @('send-keys',$Value,'--via','send-input') | Out-Null}
 function Focused([string]$Id){UI @('wait-for',$Id,'-p','HasKeyboardFocus','--value','True','-t','3000') | Out-Null}
+function ClickBrowserPath([string]$Path){
+    foreach($page in 1..30){
+        $row=Inspect | Where-Object {$_.automationId -eq ('BrowserItem:'+$Path) -and !$_.isOffscreen} | Select-Object -First 1
+        if($row){UI @('click',$row.selector) | Out-Null;return}
+        Keys 'pagedown'
+    }
+    throw "Registered browser path not found: $Path"
+}
 function Paused{UI @('wait-for','Resume','-p','Name','--value','再生','-t','3000') | Out-Null}
 function Title([string]$Expected){UI @('wait-for','PART_TitleText','--value',$Expected,'-t','5000') | Out-Null}
 function Capture([string]$Name){$path=Join-Path $artifacts "$Name.png";UI @('screenshot','--output',$path) | Out-Null;if(!(Test-Path -LiteralPath $path) -or !(Get-Item -LiteralPath $path).Length){throw 'Screenshot missing.'};$screenshots.Add($path)}
@@ -56,14 +69,22 @@ function CheckTitleBar {
     $items=Inspect
     $bar=$items | Where-Object {$_.automationId -eq 'AppTitleBar'} | Select-Object -First 1
     $player=$items | Where-Object {$_.automationId -eq 'VideoPlayer'} | Select-Object -First 1
-    $commands=@($items | Where-Object {$_.automationId -in @('PlayerHome','PlaybackFolder','PlaybackInfo')})
-    if(!$bar -or !$player -or $commands.Count -ne 3){throw 'Title-bar commands unavailable.'}
+    $caption=$items | Where-Object {$_.automationId -eq 'Minimize'} | Select-Object -First 1
+    $scale=[WindowedKeyboardNative]::Scale($hwnd)
+    $commands=@($items | Where-Object {$_.automationId -in @('PlayerHome','PlaybackFolder','PlaybackInfo','WindowFullscreen')})
+    if(!$bar -or !$player -or !$caption -or $commands.Count -ne 4){throw 'Title-bar commands unavailable.'}
+    if([math]::Abs($bar.height-32*$scale) -gt 1 -or [math]::Abs($bar.height-$caption.height) -gt 1 -or
+        [math]::Abs($bar.y-$caption.y) -gt 1){throw 'Title bar does not match the standard caption height.'}
     foreach($button in $commands){
-        if($button.width -lt 39 -or $button.height -lt 39 -or $button.x -lt $bar.x -or $button.y -lt $bar.y -or
+        if([math]::Abs($button.width-32*$scale) -gt 1 -or [math]::Abs($button.height-28*$scale) -gt 1 -or
+            [math]::Abs(($button.y+$button.height/2)-($caption.y+$caption.height/2)) -gt 1.5 -or
+            $button.x -lt $bar.x -or $button.y -lt $bar.y -or
+            $button.x+$button.width -gt $caption.x-8*$scale+1 -or
             $button.x+$button.width -gt $bar.x+$bar.width+1 -or $button.y+$button.height -gt $player.y+1){throw "Command not inside title bar: $($button.automationId)"}
     }
     $title=$items | Where-Object {$_.automationId -eq 'PART_TitleText'} | Select-Object -First 1
     if(!$title -or $title.y -ge $player.y){throw 'Playback title remained over the video.'}
+    if($title.height -lt 20*$scale -or $title.y -lt $bar.y -or $title.y+$title.height -gt $bar.y+$bar.height+1){throw 'Larger title text is missing or clipped vertically.'}
 }
 function CheckInitialVideoViewport {
     $items=Inspect
@@ -90,22 +111,49 @@ $extra=@'
     [DllImport("dwmapi.dll")] static extern int DwmGetWindowAttribute(IntPtr w,uint attribute,out Rect r,int size);
     public static Rect CaptureBounds(IntPtr w){if(DwmGetWindowAttribute(w,9,out var r,Marshal.SizeOf<Rect>())!=0)throw new Exception("No capture bounds.");return r;}
     public static void Close(IntPtr w){PostMessageW(w,0x10,IntPtr.Zero,IntPtr.Zero);}
+    public static void ClickPoint(IntPtr w,int x,int y){Guard(w);var old=SetCursorDpiContext(new IntPtr(-4));try{if(!GetWindowRect(w,out var r)||x<r.left||x>=r.right||y<r.top||y>=r.bottom)throw new Exception("Click outside target window.");if(!SetCursorPos(x,y))throw new Exception("Move to click failed.");var inputs=new[]{new Input{type=0,u=new Union{mouse=new Mouse{flags=2}}},new Input{type=0,u=new Union{mouse=new Mouse{flags=4}}}};if(SendInput(2,inputs,Marshal.SizeOf<Input>())!=2)throw new Exception("Click failed.");Thread.Sleep(100);}finally{if(old!=IntPtr.Zero)SetCursorDpiContext(old);}}
+    public static void MoveOutside(IntPtr w){Guard(w);var old=SetCursorDpiContext(new IntPtr(-4));try{if(!GetWindowRect(w,out var r)||!SetCursorPos(r.left>20?r.left-16:r.right+16,(r.top+r.bottom)/2))throw new Exception("Move outside failed.");if(!GetPhysicalCursorPos(out var p)||(p.x>=r.left&&p.x<r.right&&p.y>=r.top&&p.y<r.bottom))throw new Exception("Pointer remained inside window.");}finally{if(old!=IntPtr.Zero)SetCursorDpiContext(old);}}
     [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr w,IntPtr after,int x,int y,int width,int height,uint flags);
     [DllImport("user32.dll")] static extern uint GetDpiForWindow(IntPtr w);
+    [DllImport("user32.dll")] public static extern bool IsZoomed(IntPtr w);
+    public static void DoubleClickCaption(IntPtr w,int timing=80){Guard(w);var old=SetCursorDpiContext(new IntPtr(-4));try{if(!GetWindowRect(w,out var r))throw new Exception("No window bounds.");double scale=GetDpiForWindow(w)/96.0;int x=r.left+(int)(80*scale),y=r.top+(int)(16*scale);if(!SetCursorPos(x,y))throw new Exception("Move to caption failed.");var down=new[]{new Input{type=0,u=new Union{mouse=new Mouse{flags=2}}}};var up=new[]{new Input{type=0,u=new Union{mouse=new Mouse{flags=4}}}};for(int i=0;i<2;i++){if(SendInput(1,down,Marshal.SizeOf<Input>())!=1)throw new Exception("Caption down failed.");Thread.Sleep(timing);if(SendInput(1,up,Marshal.SizeOf<Input>())!=1)throw new Exception("Caption up failed.");Thread.Sleep(timing);}}finally{if(old!=IntPtr.Zero)SetCursorDpiContext(old);}}
+    public static double Scale(IntPtr w){return GetDpiForWindow(w)/96.0;}
     public static void Resize(IntPtr w,int width,int height){Guard(w);var old=SetCursorDpiContext(new IntPtr(-4));try{double scale=GetDpiForWindow(w)/96.0;if(!SetWindowPos(w,IntPtr.Zero,0,0,(int)(width*scale),(int)(height*scale),0x16))throw new Exception("Resize failed.");}finally{if(old!=IntPtr.Zero)SetCursorDpiContext(old);}}
 '@
 $native=$native.Insert($native.LastIndexOf('}'),$extra)
 Add-Type $native
 $recording=$null
+$originalLink=$null
 try{
     if(!(Test-Path -LiteralPath $VideoPath -PathType Leaf)){throw 'A test video of at least 60 seconds is required.'}
-    Copy-Item -LiteralPath $VideoPath -Destination (Join-Path $fixture 'Sample OP.mp4')
-    Copy-Item -LiteralPath $VideoPath -Destination (Join-Path $fixture 'Sample ED.mp4')
-    $launch=Checked @('run',(Join-Path $repo 'ContinuousPlayer'),'--arch','x64','--no-build','--no-restore','--detach','--json') | ConvertFrom-Json
+    if($RegisteredRoot){
+        if(!$MaximizeOnly){throw 'RegisteredRoot requires MaximizeOnly.'}
+        $startupFileName=Split-Path -Leaf $VideoPath
+    }elseif($OriginalMedia){
+        if(!$MaximizeOnly){throw 'OriginalMedia requires MaximizeOnly.'}
+        $startupFileName=Split-Path -Leaf $VideoPath
+        $originalLink=Join-Path $fixture 'Original'
+        New-Item -ItemType Junction -Path $originalLink -Target (Split-Path -Parent $VideoPath) | Out-Null
+    }else{
+        $startupFileName=if($MaximizeOnly){'Sample OP'+[IO.Path]::GetExtension($VideoPath)}else{'Sample OP.mp4'}
+        Copy-Item -LiteralPath $VideoPath -Destination (Join-Path $fixture $startupFileName)
+        Copy-Item -LiteralPath $VideoPath -Destination (Join-Path $fixture 'Sample ED.mp4')
+    }
+    $launchArguments=if($MaximizeOnly){@('run',(Join-Path $repo 'ContinuousPlayer'),'--detach','--json')}else{@('run',(Join-Path $repo 'ContinuousPlayer'),'--arch','x64','--no-build','--no-restore','--detach','--json')}
+    $launch=Checked $launchArguments | ConvertFrom-Json
     $appPid=[int]$launch.ProcessId;if(!$appPid){throw 'No local process.'}
     UI @('wait-for','ChooseFolder','-p','IsEnabled','--value','True','-t','10000') | Out-Null
     $hwnd=[WindowedKeyboardNative]::Main($appPid);if($hwnd -eq [IntPtr]::Zero){throw 'No main window.'}
-    UI @('invoke','ChooseFolder') | Out-Null;UI @('click','フォルダーを追加') | Out-Null;UI @('click','PC / ローカルフォルダー') | Out-Null
+    UI @('invoke','ChooseFolder') | Out-Null
+    if($RegisteredRoot){
+        $rootRow=Fresh ('BrowserItem:local:'+$RegisteredRoot);UI @('click',$rootRow.selector) | Out-Null
+        $relative=[IO.Path]::GetRelativePath($RegisteredRoot,(Split-Path -Parent $VideoPath))
+        if($relative.StartsWith('..') -or [IO.Path]::IsPathRooted($relative)){throw 'Video is outside registered root.'}
+        $folderPath=$RegisteredRoot
+        if($relative -ne '.') {foreach($part in $relative.Split([IO.Path]::DirectorySeparatorChar)){$folderPath=Join-Path $folderPath $part;ClickBrowserPath $folderPath}}
+        ClickBrowserPath $VideoPath
+    }else{
+    UI @('click','フォルダーを追加') | Out-Null;UI @('click','PC / ローカルフォルダー') | Out-Null
     $picker=[IntPtr]::Zero
     for($i=0;$i -lt 40 -and $picker -eq [IntPtr]::Zero;$i++){$picker=[WindowedKeyboardNative]::Picker($hwnd);if($picker -eq [IntPtr]::Zero){Start-Sleep -Milliseconds 100}}
     if($picker -eq [IntPtr]::Zero){throw 'No native picker.'}
@@ -114,22 +162,54 @@ try{
     $register=Fresh 'RegisterFolder';UI @('invoke',$register.selector) | Out-Null
     $script:registeredFixtureName=Split-Path -Leaf $fixture;$script:testFixtureWasRegistered=$true
     $registration=Fresh $script:registeredFixtureName;UI @('click',$registration.selector) | Out-Null
-    $file=Fresh 'Sample OP.mp4';UI @('click',$file.selector) | Out-Null
+    if($OriginalMedia){$original=Fresh 'Original';UI @('click',$original.selector) | Out-Null}
+    $file=Fresh $startupFileName;UI @('click',$file.selector) | Out-Null
+    }
     # Do not traverse the MediaPlayerElement UIA provider while video is playing.
-    Start-Sleep -Milliseconds 1600
+    Start-Sleep -Milliseconds $StartupDelayMilliseconds
+    if(!$LayoutOnly){
+    Case 'Startup caption double-click maximizes and restores without stopping playback' {
+        [WindowedKeyboardNative]::DoubleClickCaption($hwnd,$CaptionClickMilliseconds);Start-Sleep -Milliseconds 1800
+        if(![WindowedKeyboardNative]::IsZoomed($hwnd)){throw 'Caption double-click did not maximize.'}
+        Capture '00-maximized-playing'
+        Start-Sleep -Milliseconds 1200;Capture '00-maximized-next-frame'
+        $first=Information;Start-Sleep -Milliseconds 1800;$second=Information
+        if($second-$first -lt 1){throw "Playback stopped after maximizing: $first -> $second seconds."}
+        Write-Host "Maximized playback position: $first -> $second seconds."
+        [WindowedKeyboardNative]::DoubleClickCaption($hwnd,$CaptionClickMilliseconds);Start-Sleep -Milliseconds 1000
+        if([WindowedKeyboardNative]::IsZoomed($hwnd)){throw 'Caption double-click did not restore.'}
+        $first=Information;Start-Sleep -Milliseconds 1800;$second=Information
+        if($second-$first -lt 1){throw "Playback stopped after restoring: $first -> $second seconds."}
+        Write-Host "Restored playback position: $first -> $second seconds."
+    }
+    }
+    if(!$MaximizeOnly){
     [WindowedKeyboardNative]::KeyPress($hwnd,32)
     Case 'Windowed Space pauses without moving keyboard focus off the video' {
         Paused;Focused 'TouchSurface';$null=Fresh 'WindowFullscreen'
         $items=Inspect
         $script:chromeRegions=@($items | Where-Object {$_.automationId -in @('SeekBackward','SeekForward','Resume')})
         if($script:chromeRegions.Count -ne 3){throw 'Overlay bounds unavailable.'}
-        $script:titleBarRegions=@($items | Where-Object {$_.automationId -in @('PART_TitleText','PlaybackInfo')})
-        if($script:titleBarRegions.Count -ne 2){throw 'Title-bar bounds unavailable.'}
+        $script:titleBarRegions=@($items | Where-Object {$_.automationId -in @('PART_TitleText','PlayerHome','PlaybackFolder','PlaybackInfo')})
+        if($script:titleBarRegions.Count -ne 4){throw 'Title-bar bounds unavailable.'}
         CheckTitleBar
         CheckInitialVideoViewport
         CaptureChrome '01-paused-surface' $true
     }
     if(!$LayoutOnly){
+    Case 'Clicking the title and empty title bar preserves playback shortcuts' {
+        UI @('click','PART_TitleText') | Out-Null
+        Keys 'right';Title 'Sample ED';Paused;Focused 'TouchSurface'
+        $bar=Fresh 'AppTitleBar'
+        $blankX=[int]($bar.x+$bar.width/2);$blankY=[int]($bar.y+$bar.height/2)
+        [WindowedKeyboardNative]::ClickPoint($hwnd,$blankX,$blankY)
+        Keys 'left';Title 'Sample OP';Paused;Focused 'TouchSurface'
+        UI @('focus','WindowFullscreen') | Out-Null
+        [WindowedKeyboardNative]::ClickPoint($hwnd,$blankX,$blankY)
+        [WindowedKeyboardNative]::KeyPress($hwnd,32);Start-Sleep -Milliseconds 200
+        CaptureChrome '01-titlebar-click-resumed' $false
+        [WindowedKeyboardNative]::KeyPress($hwnd,32);Paused;Focused 'TouchSurface'
+    }
     Case 'Paused arrows select files and seek without manually refocusing the video' {
         Keys 'right';Title 'Sample ED';Paused;Focused 'TouchSurface'
         Keys 'left';Title 'Sample OP';Paused
@@ -161,6 +241,8 @@ try{
         UI @('wait-for','MediaInfoText','--gone','-t','3000') | Out-Null
         UI @('click','PlaybackFolder') | Out-Null;$null=Fresh 'BrowserList';Capture '04-titlebar-file-list'
         UI @('invoke','BrowserCancel') | Out-Null;Paused
+        UI @('click','WindowFullscreen') | Out-Null;$null=Fresh 'PlaybackFullscreen'
+        UI @('click','PlaybackFullscreen') | Out-Null;$null=Fresh 'WindowFullscreen';Paused
     }
     Case 'Space resumes and pauses again while retaining surface keyboard controls' {
         [WindowedKeyboardNative]::Move($hwnd)
@@ -186,6 +268,13 @@ try{
         UI @('click','Resume') | Out-Null;Start-Sleep -Milliseconds 150
         CaptureChrome '11-mouse-resumed-hidden' $false
         [WindowedKeyboardNative]::KeyPress($hwnd,32);Paused;Focused 'TouchSurface'
+    }
+    Case 'Windowed title and all three commands remain visible after idle outside the window' {
+        [WindowedKeyboardNative]::KeyPress($hwnd,32)
+        [WindowedKeyboardNative]::MoveOutside($hwnd)
+        Start-Sleep -Milliseconds 3400
+        CaptureChrome '11-idle-outside-titlebar' $false
+        [WindowedKeyboardNative]::KeyPress($hwnd,32);Paused
     }
     Case 'Left and Right file transitions never flash chrome in captured frames' {
         [WindowedKeyboardNative]::Move($hwnd)
@@ -215,22 +304,35 @@ try{
         [WindowedKeyboardNative]::Resize($hwnd,1024,576);Start-Sleep -Milliseconds 400
         CheckTitleBar
     }
-    Case 'Playback title remains draggable and Home restores the app title bar' {
+    Case 'Title drag retains playback shortcuts and Home keeps the app title and commands visible' {
         $title=Fresh 'PART_TitleText';$before=[WindowedKeyboardNative]::CaptureBounds($hwnd)
         $x=[int]($title.x+40);$y=[int]($title.y+$title.height/2)
         UI @('drag',"$x,$y","$($x+60),$($y+40)") | Out-Null
         $after=[WindowedKeyboardNative]::CaptureBounds($hwnd)
         if([math]::Abs($after.left-$before.left) -lt 20){throw 'Playback title did not drag the window.'}
+        Keys 'left';Title 'Sample OP';Paused;Focused 'TouchSurface'
+        Keys 'right';Title 'Sample ED';Paused;Focused 'TouchSurface'
         UI @('click','PlayerHome') | Out-Null;$null=Fresh 'ChooseFolder'
         $items=Inspect
-        if(@($items | Where-Object {$_.automationId -eq 'PlayerHome' -and !$_.isOffscreen}).Count){throw 'Playback actions remained in the home title bar.'}
+        foreach($command in @('PlayerHome','PlaybackFolder','PlaybackInfo')){
+            $button=$items | Where-Object {$_.automationId -eq $command -and !$_.isOffscreen} | Select-Object -First 1
+            if(!$button){throw "Home title-bar command hidden: $command"}
+            if($button.isEnabled){throw "Home title-bar command should be disabled without media: $command"}
+        }
+        Title 'ContinuousPlayer'
         Capture '13-home-titlebar'
+    }
     }
 }catch{if(!$results.Count -or $results[$results.Count-1].status -ne 'FAIL'){$results.Add(@{name='Setup / execution';status='FAIL';detail="$_"});try{Capture 'setup-failure'}catch{}};Write-Host "FAIL $_"}
 finally{
     if($recording -and !$recording.HasExited){$recording.WaitForExit(15000) | Out-Null}
     try{if($appPid -gt 0 -and (Get-Process -Id $appPid -ErrorAction SilentlyContinue)){Remove-TestFixtureRegistration}}catch{$results.Add(@{name='Fixture cleanup';status='FAIL';detail="$_"})}
     if($hwnd -ne [IntPtr]::Zero -and (Get-Process -Id $appPid -ErrorAction SilentlyContinue)){[WindowedKeyboardNative]::Close($hwnd)}
+    if($originalLink -and (Test-Path -LiteralPath $originalLink)){
+        $junction=Get-Item -LiteralPath $originalLink -Force
+        if($junction.LinkType -ne 'Junction' -or !$junction.FullName.StartsWith($fixture+[IO.Path]::DirectorySeparatorChar,[StringComparison]::OrdinalIgnoreCase)){throw 'Unexpected original-media link during cleanup.'}
+        Remove-Item -LiteralPath $junction.FullName -Force
+    }
     try{Checked @('ui','yield') | Out-Null}catch{$results.Add(@{name='Release UI workflow';status='FAIL';detail="$_"})}
     $env:WINAPP_UI_WORKFLOW_ID=$priorWorkflow;$env:DOTNET_CLI_TELEMETRY_OPTOUT=$priorTelemetry
 }
