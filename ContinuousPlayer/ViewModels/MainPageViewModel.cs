@@ -28,7 +28,11 @@ public sealed partial class BrowserRow
     public MediaFile? Media { get; init; }
     public SavedFolder? Saved { get; init; }
     public DlnaServer? Server { get; init; }
-    public string Glyph => Media != null ? "\uE768" : Kind == "add" ? "\uE710" : Kind is "server" or "network" ? "\uE968" : "\uED25";
+    public string IconKey => Media != null
+        ? (Media.MimeType?.StartsWith("audio/", StringComparison.OrdinalIgnoreCase) == true ||
+           System.IO.Path.GetExtension(Media.Name).ToLowerInvariant() is ".mp3" or ".flac" or ".m4a" or ".aac" or ".wav" or ".ogg" or ".opus"
+            ? "AudioIcon" : "VideoIcon")
+        : Kind == "add" ? "AddIcon" : Kind is "server" or "network" ? "ServerIcon" : "FolderIcon";
     public string Chevron => Media == null ? "\uE76C" : "";
     public string AccessibleName => Name + (HasFormatBadge ? $"。形式 {FormatBadge}" : "") +
         (Saved != null ? "。開くにはEnter。登録解除にはDelete、右クリックまたは長押し。" : Media != null ? "。ここから連続再生。" : "。開く。");

@@ -91,7 +91,7 @@ public sealed partial class MainPage
         var label = playbackState.Phase == PlaybackPhase.Failed ? "再試行" : userPaused ? "再生" : "一時停止";
         AutomationProperties.SetName(ResumeButton, label);
         ToolTipService.SetToolTip(ResumeButton, label);
-        PlayPauseIcon.Glyph = userPaused ? "\uE768" : "\uE769";
+        PlayPauseIcon.Data = IconGeometry(userPaused ? "PlayIcon" : "PauseIcon");
     }
 
     private void Window_FullscreenChanged(object? sender, EventArgs e)

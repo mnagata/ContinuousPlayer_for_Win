@@ -3,6 +3,8 @@ using ContinuousPlayer.ViewModels;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Markup;
+using Microsoft.UI.Xaml.Media;
 using Windows.System;
 
 namespace ContinuousPlayer;
@@ -10,6 +12,14 @@ namespace ContinuousPlayer;
 public sealed partial class MainPage : Page
 {
     public MainPageViewModel Vm { get; } = new();
+
+    // Geometry has a visual owner. Each toolbar needs its own binding factory because x:Bind
+    // reuses the result of identical function bindings within a page.
+    public static Geometry IconGeometry(string key) =>
+        (Geometry)XamlBindingHelper.ConvertValue(
+            typeof(Geometry), Application.Current.Resources[key]);
+    public static Geometry TitleBarIconGeometry(string key) => IconGeometry(key);
+
     private readonly LibraryStore library = new(Windows.Storage.ApplicationData.Current.LocalFolder.Path);
     private readonly DlnaClient dlna = new();
     private bool loaded;

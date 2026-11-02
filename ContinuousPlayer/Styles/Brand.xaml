@@ -4,26 +4,58 @@
 <SolidColorBrush x:Key="MainTextBrush" Color="#FFFFFF"/>
 <SolidColorBrush x:Key="MutedTextBrush" Color="#A9B6D5"/>
 <SolidColorBrush x:Key="AccentTextBrush" Color="#66DFFF"/>
-<SolidColorBrush x:Key="BrowserBrush" Color="#111B32"/>
+<SolidColorBrush x:Key="BrowserBrush" Color="#141D32"/>
 <SolidColorBrush x:Key="BrowserStrokeBrush" Color="#42556D"/>
-<SolidColorBrush x:Key="ScrimBrush" Color="#B0000000"/>
-<SolidColorBrush x:Key="ToolbarBrush" Color="#B0000000"/>
+<SolidColorBrush x:Key="ScrimBrush" Color="#B0101724"/>
+<SolidColorBrush x:Key="ToolbarBrush" Color="#B0101724"/>
 <LinearGradientBrush x:Key="HomeBrush" StartPoint="0,0" EndPoint="1,1"><GradientStop Color="#123652" Offset="0"/><GradientStop Color="#101743" Offset=".5"/><GradientStop Color="#35204F" Offset="1"/></LinearGradientBrush>
-<LinearGradientBrush x:Key="PrimaryBrush" StartPoint="0,0" EndPoint="1,1"><GradientStop Color="#18BFD9" Offset="0"/><GradientStop Color="#7560E8" Offset="1"/></LinearGradientBrush>
+<LinearGradientBrush x:Key="PrimaryBrush" StartPoint="0,0" EndPoint="1,1"><GradientStop Color="#206580" Offset="0"/><GradientStop Color="#71488D" Offset="1"/></LinearGradientBrush>
 <LinearGradientBrush x:Key="LogoBackBrush" StartPoint="0,0" EndPoint="1,1"><GradientStop Color="#9474FF" Offset="0"/><GradientStop Color="#FF8EDB" Offset="1"/></LinearGradientBrush>
-<LinearGradientBrush x:Key="LogoFrontBrush" StartPoint="0,0" EndPoint="1,1"><GradientStop Color="#36E5F5" Offset="0"/><GradientStop Color="#348AFF" Offset="1"/></LinearGradientBrush></ResourceDictionary>
+<LinearGradientBrush x:Key="LogoFrontBrush" StartPoint="0,0" EndPoint="1,1"><GradientStop Color="#36E5F5" Offset="0"/><GradientStop Color="#348AFF" Offset="1"/></LinearGradientBrush>
+<SolidColorBrush x:Key="ButtonBackground" Color="#1A314B"/>
+<SolidColorBrush x:Key="ButtonBackgroundDisabled" Color="Transparent"/>
+<SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#29465F"/>
+<SolidColorBrush x:Key="ButtonBackgroundPressed" Color="#355B74"/>
+<SolidColorBrush x:Key="ButtonBorderBrush" Color="#3D6078"/>
+<SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="#66DFFF"/>
+<SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="#66DFFF"/>
+<SolidColorBrush x:Key="ButtonForeground" Color="#66DFFF"/>
+<SolidColorBrush x:Key="ButtonForegroundPointerOver" Color="#FFFFFF"/>
+<SolidColorBrush x:Key="ButtonForegroundPressed" Color="#FFFFFF"/>
+<SolidColorBrush x:Key="PrimaryStrokeBrush" Color="#729DBE"/>
+<SolidColorBrush x:Key="BadgeBrush" Color="#243E56"/>
+<SolidColorBrush x:Key="ListViewItemBackgroundSelected" Color="#243E56"/>
+<SolidColorBrush x:Key="ListViewItemBackgroundSelectedPointerOver" Color="#2C4B65"/>
+<SolidColorBrush x:Key="ListViewItemSelectionIndicatorBrush" Color="#66DFFF"/>
+<LinearGradientBrush x:Key="LogoArrowBrush" StartPoint="0,0" EndPoint="1,0"><GradientStop Color="#36E5F5"/><GradientStop Color="#348AFF" Offset=".5"/><GradientStop Color="#FF8EDB" Offset="1"/></LinearGradientBrush></ResourceDictionary>
 <ResourceDictionary x:Key="Dark"><SolidColorBrush x:Key="PrimaryTextBrush" Color="#FFFFFF"/><SolidColorBrush x:Key="CanvasBrush" Color="#000000"/>
 <SolidColorBrush x:Key="MainTextBrush" Color="#FFFFFF"/>
 <SolidColorBrush x:Key="MutedTextBrush" Color="#A9B6D5"/>
 <SolidColorBrush x:Key="AccentTextBrush" Color="#66DFFF"/>
-<SolidColorBrush x:Key="BrowserBrush" Color="#111B32"/>
+<SolidColorBrush x:Key="BrowserBrush" Color="#141D32"/>
 <SolidColorBrush x:Key="BrowserStrokeBrush" Color="#42556D"/>
-<SolidColorBrush x:Key="ScrimBrush" Color="#B0000000"/>
-<SolidColorBrush x:Key="ToolbarBrush" Color="#B0000000"/>
+<SolidColorBrush x:Key="ScrimBrush" Color="#B0101724"/>
+<SolidColorBrush x:Key="ToolbarBrush" Color="#B0101724"/>
 <LinearGradientBrush x:Key="HomeBrush" StartPoint="0,0" EndPoint="1,1"><GradientStop Color="#123652" Offset="0"/><GradientStop Color="#101743" Offset=".5"/><GradientStop Color="#35204F" Offset="1"/></LinearGradientBrush>
-<LinearGradientBrush x:Key="PrimaryBrush" StartPoint="0,0" EndPoint="1,1"><GradientStop Color="#18BFD9" Offset="0"/><GradientStop Color="#7560E8" Offset="1"/></LinearGradientBrush>
+<LinearGradientBrush x:Key="PrimaryBrush" StartPoint="0,0" EndPoint="1,1"><GradientStop Color="#206580" Offset="0"/><GradientStop Color="#71488D" Offset="1"/></LinearGradientBrush>
 <LinearGradientBrush x:Key="LogoBackBrush" StartPoint="0,0" EndPoint="1,1"><GradientStop Color="#9474FF" Offset="0"/><GradientStop Color="#FF8EDB" Offset="1"/></LinearGradientBrush>
-<LinearGradientBrush x:Key="LogoFrontBrush" StartPoint="0,0" EndPoint="1,1"><GradientStop Color="#36E5F5" Offset="0"/><GradientStop Color="#348AFF" Offset="1"/></LinearGradientBrush></ResourceDictionary>
+<LinearGradientBrush x:Key="LogoFrontBrush" StartPoint="0,0" EndPoint="1,1"><GradientStop Color="#36E5F5" Offset="0"/><GradientStop Color="#348AFF" Offset="1"/></LinearGradientBrush>
+<SolidColorBrush x:Key="ButtonBackground" Color="#1A314B"/>
+<SolidColorBrush x:Key="ButtonBackgroundDisabled" Color="Transparent"/>
+<SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#29465F"/>
+<SolidColorBrush x:Key="ButtonBackgroundPressed" Color="#355B74"/>
+<SolidColorBrush x:Key="ButtonBorderBrush" Color="#3D6078"/>
+<SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="#66DFFF"/>
+<SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="#66DFFF"/>
+<SolidColorBrush x:Key="ButtonForeground" Color="#66DFFF"/>
+<SolidColorBrush x:Key="ButtonForegroundPointerOver" Color="#FFFFFF"/>
+<SolidColorBrush x:Key="ButtonForegroundPressed" Color="#FFFFFF"/>
+<SolidColorBrush x:Key="PrimaryStrokeBrush" Color="#729DBE"/>
+<SolidColorBrush x:Key="BadgeBrush" Color="#243E56"/>
+<SolidColorBrush x:Key="ListViewItemBackgroundSelected" Color="#243E56"/>
+<SolidColorBrush x:Key="ListViewItemBackgroundSelectedPointerOver" Color="#2C4B65"/>
+<SolidColorBrush x:Key="ListViewItemSelectionIndicatorBrush" Color="#66DFFF"/>
+<LinearGradientBrush x:Key="LogoArrowBrush" StartPoint="0,0" EndPoint="1,0"><GradientStop Color="#36E5F5"/><GradientStop Color="#348AFF" Offset=".5"/><GradientStop Color="#FF8EDB" Offset="1"/></LinearGradientBrush></ResourceDictionary>
 <ResourceDictionary x:Key="HighContrast"><SolidColorBrush x:Key="PrimaryTextBrush" Color="{ThemeResource SystemColorHighlightTextColor}"/><SolidColorBrush x:Key="CanvasBrush" Color="{ThemeResource SystemColorWindowColor}"/>
 <SolidColorBrush x:Key="HomeBrush" Color="{ThemeResource SystemColorWindowColor}"/>
 <SolidColorBrush x:Key="BrowserBrush" Color="{ThemeResource SystemColorWindowColor}"/>
@@ -35,12 +67,27 @@
 <SolidColorBrush x:Key="BrowserStrokeBrush" Color="{ThemeResource SystemColorWindowTextColor}"/>
 <SolidColorBrush x:Key="PrimaryBrush" Color="{ThemeResource SystemColorHighlightColor}"/>
 <SolidColorBrush x:Key="LogoBackBrush" Color="{ThemeResource SystemColorWindowTextColor}"/>
-<SolidColorBrush x:Key="LogoFrontBrush" Color="{ThemeResource SystemColorWindowTextColor}"/></ResourceDictionary>
+<SolidColorBrush x:Key="LogoFrontBrush" Color="{ThemeResource SystemColorWindowTextColor}"/><SolidColorBrush x:Key="PrimaryStrokeBrush" Color="{ThemeResource SystemColorButtonTextColor}"/>
+<SolidColorBrush x:Key="BadgeBrush" Color="{ThemeResource SystemColorWindowColor}"/><SolidColorBrush x:Key="LogoArrowBrush" Color="{ThemeResource SystemColorWindowTextColor}"/></ResourceDictionary>
 </ResourceDictionary.ThemeDictionaries>
 <Style x:Key="PlayerButtonStyle" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
-<Setter Property="Width" Value="48"/><Setter Property="Height" Value="48"/><Setter Property="Padding" Value="0"/><Setter Property="Background" Value="Transparent"/><Setter Property="Foreground" Value="{ThemeResource MainTextBrush}"/><Setter Property="CornerRadius" Value="8"/>
+<Setter Property="Width" Value="48"/><Setter Property="Height" Value="48"/><Setter Property="Padding" Value="0"/><Setter Property="Background" Value="Transparent"/><Setter Property="Foreground" Value="{ThemeResource MainTextBrush}"/><Setter Property="CornerRadius" Value="24"/><Setter Property="BorderThickness" Value="0"/>
 </Style>
 <Style x:Key="TitleBarButtonStyle" TargetType="Button" BasedOn="{StaticResource PlayerButtonStyle}">
 <Setter Property="Width" Value="32"/><Setter Property="Height" Value="28"/><Setter Property="MinHeight" Value="0"/><Setter Property="CornerRadius" Value="4"/>
 </Style>
-</ResourceDictionary>
+<Style x:Key="BrowserButtonStyle" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
+<Setter Property="CornerRadius" Value="24"/><Setter Property="BorderThickness" Value="1"/>
+<Setter Property="FontWeight" Value="SemiBold"/>
+</Style>
+<Style x:Key="BrowserIconButtonStyle" TargetType="Button" BasedOn="{StaticResource BrowserButtonStyle}">
+<Setter Property="Padding" Value="0"/>
+</Style>
+<Style x:Key="PrimaryButtonStyle" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
+<Setter Property="Background" Value="{ThemeResource PrimaryBrush}"/>
+<Setter Property="Foreground" Value="{ThemeResource PrimaryTextBrush}"/>
+<Setter Property="BorderBrush" Value="{ThemeResource PrimaryStrokeBrush}"/>
+<Setter Property="BorderThickness" Value="1"/>
+<Setter Property="CornerRadius" Value="16"/>
+<Setter Property="FontWeight" Value="SemiBold"/>
+</Style></ResourceDictionary>
