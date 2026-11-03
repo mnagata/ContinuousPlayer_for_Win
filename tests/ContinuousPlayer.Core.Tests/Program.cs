@@ -20,6 +20,14 @@ var fixture = Path.Combine(Path.GetTempPath(), "ContinuousPlayerTests-" + Guid.N
 Directory.CreateDirectory(fixture);
 try
 {
+    foreach (var (name, test) in HttpAudioTests.Cases())
+        await Test(name, test);
+    foreach (var (name, test) in AudioSettingsTests.Cases())
+        await Test(name, test);
+    foreach (var (name, test) in ExclusiveAudioPolicyTests.Cases())
+        await Test(name, test);
+    foreach (var (name, test) in PlaybackEngineSessionTests.Cases())
+        await Test(name, test);
     foreach (var (name, test) in PlaybackSessionStateTests.Cases())
         await Test(name, () => Check(test));
     foreach (var (name, test) in PlaybackInputTests.Cases())
@@ -65,6 +73,20 @@ try
         await File.WriteAllTextAsync(Path.Combine(root, "child", "nested.mp4"), "fixture");
         var result = await LocalFolders.ReadAsync(root, default);
         Equal(1, result.Folders.Count); Equal(2, result.Media.Count); Equal("作品 OP.mp4", result.Media[0].Name);
+    });
+    await Test("Local browser scan includes every supported audio extension in either case", async () =>
+    {
+        var root = Path.Combine(fixture, "audio-scan");
+        Directory.CreateDirectory(Path.Combine(root, "child"));
+        var names = new[] { ".mp3", ".flac", ".m4a", ".aac", ".wav", ".ogg", ".opus" }
+            .SelectMany(extension => new[] { "音声" + extension, "大文字" + extension.ToUpperInvariant() }).ToArray();
+        foreach (var name in names.Append("._ignored.mp3").Append("readme.txt"))
+            await File.WriteAllTextAsync(Path.Combine(root, name), "listing fixture");
+        await File.WriteAllTextAsync(Path.Combine(root, "child", "nested.wav"), "listing fixture");
+        var result = await LocalFolders.ReadAsync(root, default);
+        Equal(1, result.Folders.Count);
+        Equal(names.Length, result.Media.Count);
+        True(names.ToHashSet(StringComparer.Ordinal).SetEquals(result.Media.Select(file => file.Name)));
     });
     await Test("Missing folder is an error, not an empty list", async () =>
     {

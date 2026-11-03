@@ -128,7 +128,7 @@ try {
     Case 'Keyboard toolbar navigation and media information' {
         UI @('focus','PlaybackInfo'); UI @('send-keys','enter','--via','send-input'); Wait 'CloseButton'
         $text = (Inspect | Where-Object { $_.type -eq 'Text' } | ForEach-Object { $_.name }) -join "`n"
-        if ($text -notmatch '8,?000 Hz' -or $text -notmatch 'Bit-Perfect') { throw 'Audio metadata missing.' }
+        if ($text -notmatch '8,?000 Hz' -or $text -notmatch '実際の再生モード') { throw 'Audio metadata missing.' }
         Capture '07-info'; UI @('invoke','CloseButton')
     }
     Case 'Escape returns to source folder and restores current file focus' {

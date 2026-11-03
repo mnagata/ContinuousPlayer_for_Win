@@ -15,6 +15,7 @@ namespace ContinuousPlayer;
 /// </summary>
 public partial class App : Application
 {
+    internal static Core.AudioPlaybackOptions AudioOptions { get; private set; } = new();
     /// <summary>
     /// The main application window. Use <c>App.Window</c> from any class that needs
     /// the window reference (for dialogs, pickers, interop, etc.).
@@ -53,6 +54,7 @@ public partial class App : Application
     {
         try
         {
+            AudioOptions = Core.AudioPlaybackOptions.Parse(Environment.GetCommandLineArgs().Skip(1).ToArray());
             Window = new MainWindow();
             DispatcherQueue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
             ((MainWindow)Window).ShowMainPage();

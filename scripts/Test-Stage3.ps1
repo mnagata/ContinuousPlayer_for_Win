@@ -161,7 +161,9 @@ try {
         Start-Sleep -Seconds 4;Wait 'PlaybackFolder';Capture '12-focused-playing'
     }
     Case 'Video overlays hide after three idle seconds over a button and restore on movement' {
-        UI @('focus','TouchSurface') | Out-Null;UI @('hover','SeekForward') | Out-Null
+        UI @('focus','TouchSurface') | Out-Null
+        # Moving to the surface reveals the overlay before resolving its now-visible button.
+        [Stage3Native]::Move($hwnd);Wait 'SeekForward';UI @('hover','SeekForward') | Out-Null
         Start-Sleep -Milliseconds 700
         if(![Stage3Native]::Visible($hwnd)){throw 'Hover hid before the idle delay.'};Capture '13-hover-active'
         $before=[Stage3Native]::Position();Start-Sleep -Milliseconds 2800
@@ -175,7 +177,7 @@ try {
     Case 'Mouse resume hides the video overlays immediately' {
         UI @('click','Resume') | Out-Null
         Start-Sleep -Milliseconds 150
-        if([Stage3Native]::Visible($hwnd)){throw 'Resume did not hide controls immediately.'};Capture '16-click-resumed'
+        if([Stage3Native]::Visible($hwnd)){throw "Resume did not hide the OS cursor within 150 ms: $([Stage3Native]::CursorState())"};Capture '16-click-resumed'
         $before=[Stage3Native]::Position();Start-Sleep -Milliseconds 3200
         if([Stage3Native]::Visible($hwnd)){throw 'Mouse focus prevented auto-hide.'}
         if([Stage3Native]::Position() -ne $before){throw 'Pointer moved during mouse-focus idle.'};Capture '17-click-idle'

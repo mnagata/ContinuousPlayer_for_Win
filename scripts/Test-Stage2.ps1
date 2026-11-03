@@ -147,9 +147,9 @@ try{
     Case 'S16: slow 75 DIP swipes work, and pinch never sends a file or toggles' {
         $distance=[string][int][math]::Ceiling(75*[Stage2Native]::GetDpiForWindow($hwnd)/96)
         UI @('touch','TouchSurface','-g','swipe','--direction','left','--distance',$distance,'--duration-ms','2000') | Out-Null
-        Wait 'Sample ED.wav';Wait 'Resume'
+        UI @('wait-for','PART_TitleText','--value','Sample ED','-t','5000') | Out-Null;Wait 'Resume'
         UI @('touch','TouchSurface','-g','swipe','--direction','right','--distance',$distance,'--duration-ms','2000') | Out-Null
-        Wait 'Sample OP.wav';Wait 'Resume'
+        UI @('wait-for','PART_TitleText','--value','Sample OP','-t','5000') | Out-Null;Wait 'Resume'
         UI @('touch','TouchSurface','-g','pinch','--distance','180') | Out-Null;Wait 'Resume'
         $value=Info 'after-pinch';if($value.file -ne 'Sample OP.wav'){throw 'Pinch changed files.'};Near 0 $value.seconds;CloseInfo
     }
@@ -168,6 +168,21 @@ try{
         $value=Info 'modal-before';[Stage2Native]::Down(0xB0);Start-Sleep -Milliseconds 100;[Stage2Native]::Up(0xB0)
         Keys 'h';Keys 'o';Capture '03-information';CloseInfo
         $after=Info 'modal-after';if($value.file -ne $after.file){throw 'Modal input reached playback.'};Near $value.seconds $after.seconds;CloseInfo
+    }
+    Case 'Audio engine: media keys remain available after Home and a new playback session' {
+        Keys 'h';Wait 'ChooseFolder';UI @('invoke','ChooseFolder') | Out-Null;Wait 'BrowserList'
+        UI @('click',$script:registeredFixtureName) | Out-Null;Wait 'Sample OP.wav'
+        UI @('click','Sample OP.wav') | Out-Null;Wait 'VideoPlayer';Gone 'Resume'
+        Keys 'space';Wait 'Resume'
+        [Stage2Native]::Down(0xB0);Start-Sleep -Milliseconds 160;[Stage2Native]::Up(0xB0)
+        $value=Info 'media-next-after-home';if($value.file -ne 'Sample ED.wav'){throw 'Media Next was lost after Home.'};CloseInfo
+        [Stage2Native]::Down(0xB1);Start-Sleep -Milliseconds 160;[Stage2Native]::Up(0xB1)
+        $value=Info 'media-previous-after-home';if($value.file -ne 'Sample OP.wav'){throw 'Media Previous was lost after Home.'};CloseInfo
+        [Stage2Native]::Down(0xB3);Start-Sleep -Milliseconds 160;[Stage2Native]::Up(0xB3)
+        UI @('wait-for','Resume','-p','Name','--value','一時停止','-t','5000') | Out-Null
+        [Stage2Native]::Down(0xB3);Start-Sleep -Milliseconds 160;[Stage2Native]::Up(0xB3)
+        UI @('wait-for','Resume','-p','Name','--value','再生','-t','5000') | Out-Null
+        Wait 'Resume'
     }
     if($SkipActivationProbe){
         $results.Add(@{name='S15: inactive first click';status='SKIP';detail='Explicitly excluded: helper activation was previously blocked by the foreground guard. Physical click acceptance remains unverified.'})

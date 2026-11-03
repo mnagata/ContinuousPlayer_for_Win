@@ -1,0 +1,22 @@
+<ContentDialog x:Class="ContinuousPlayer.AudioSettingsDialog"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="音声出力設定" PrimaryButtonText="保存" CloseButtonText="キャンセル"
+    DefaultButton="Primary" IsPrimaryButtonEnabled="False" RequestedTheme="Dark" Style="{StaticResource DefaultContentDialogStyle}"
+    Loaded="Dialog_Loaded" PrimaryButtonClick="Save_Click" Closing="Dialog_Closing" Closed="Dialog_Closed">
+    <ScrollViewer MaxHeight="440" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+        <StackPanel Spacing="16" MinWidth="280" MaxWidth="480">
+            <RadioButtons x:Name="ModeSelection" Header="再生モード" SelectionChanged="Mode_Changed" AutomationProperties.AutomationId="AudioMode">
+                <RadioButton Content="標準" AutomationProperties.AutomationId="AudioModeStandard"/>
+                <RadioButton Content="曲に合わせる（排他）" AutomationProperties.AutomationId="AudioModeExclusive"/>
+            </RadioButtons>
+            <TextBlock Text="排他再生中は、同じ出力機器を他のアプリが使えない場合があります。" TextWrapping="Wrap" Style="{StaticResource BodyTextBlockStyle}"/>
+            <ComboBox x:Name="DeviceSelection" Header="排他再生の出力先" HorizontalAlignment="Stretch" AutomationProperties.AutomationId="AudioDevice"/>
+            <Button x:Name="RefreshButton" Content="機器一覧を更新" Click="Refresh_Click" AutomationProperties.AutomationId="RefreshAudioDevices"/>
+            <InfoBar x:Name="SettingsMessage" IsOpen="False" Visibility="Collapsed" IsClosable="False" Severity="Warning" AutomationProperties.AutomationId="AudioSettingsMessage"/>
+            <TextBlock Text="特定の機器が接続されていない場合は停止し、別の機器へ自動出力しません。標準再生ではWindows既定の出力先を使います。" TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}"/>
+            <TextBlock Text="ローカル・NAS/DLNAの音声が対象です。HTTP配信にはRange対応と全体サイズが必要です。動画は標準再生です。形式によってWindowsのデコーダーが必要です。" TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}"/>
+            <TextBlock Text="再生中に設定を変更すると、同じ位置で一時停止します。再生ボタンで再開してください。" TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}"/>
+        </StackPanel>
+    </ScrollViewer>
+</ContentDialog>

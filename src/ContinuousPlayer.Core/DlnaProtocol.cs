@@ -79,7 +79,8 @@ public static class DlnaProtocol
                         if (!(mime.StartsWith("video/") || mime.StartsWith("audio/") ||
                             ((mime is "*" or "application/octet-stream") && (MediaCatalog.IsSupported(title) || MediaCatalog.IsSupported(url.AbsolutePath))))) continue;
                         var media = new MediaFile(id, title, url.ToString(), long.TryParse((string?)res.Attribute("size"), out var size) ? size : -1,
-                            mime.StartsWith("audio/") || mime.StartsWith("video/") ? mime : null);
+                            mime.StartsWith("audio/") || mime.StartsWith("video/") ? mime : null,
+                            protocol[3].Contains("DLNA.ORG_CI=1", StringComparison.OrdinalIgnoreCase));
                         entries.Add(new(id, title, media));
                         break;
                     }

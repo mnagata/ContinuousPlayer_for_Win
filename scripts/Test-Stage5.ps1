@@ -1,5 +1,5 @@
 # Local packaged UI acceptance using loopback HTTP without SSDP and an owned registration.
-param()
+param([switch]$ContinueAfterFocusFailure)
 $ErrorActionPreference='Stop';$PSNativeCommandUseErrorActionPreference=$false
 $repo=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $id=(Get-Date -Format 'yyyyMMdd-HHmmss')+'-'+[guid]::NewGuid().ToString('N').Substring(0,8)
@@ -9,7 +9,7 @@ $priorWorkflow=$env:WINAPP_UI_WORKFLOW_ID;$priorTelemetry=$env:DOTNET_CLI_TELEME
 $env:WINAPP_UI_WORKFLOW_ID="continuousplayer-stage5-$id";$env:DOTNET_CLI_TELEMETRY_OPTOUT='1'
 $appPid=0;$hwnd=$null;$serverA=$null;$serverB=$null;$owned=$false
 $results=[Collections.Generic.List[object]]::new();$screenshots=[Collections.Generic.List[string]]::new();$observations=[Collections.Generic.List[object]]::new()
-function Checked([string[]]$Arguments){$r=@(& winapp @Arguments);if($LASTEXITCODE -ne 0){throw "winapp $($Arguments -join ' ') failed: $($r -join "`n")"};$r}
+function Checked([string[]]$Arguments){$r=@(& winapp @Arguments 2>&1 | ForEach-Object {"$_"});if($LASTEXITCODE -ne 0){throw "winapp $($Arguments -join ' ') failed: $($r -join "`n")"};$r}
 function UI([string[]]$Arguments){$scope=if($hwnd -and $Arguments[0] -ne 'list-windows'){@('-w',$hwnd)}else{@('-a',"$appPid")};Checked (@('ui')+$Arguments+$scope)}
 function Wait([string]$Name,[int]$Timeout=10000){UI @('wait-for',$Name,'-t',"$Timeout") | Out-Null}
 function Gone([string]$Name){UI @('wait-for',$Name,'--gone','-t','5000') | Out-Null}
@@ -17,7 +17,12 @@ function Keys([string]$Value){UI @('send-keys',$Value,'--via','send-input') | Ou
 function Ready{UI @('wait-for','BrowserRefresh','-p','IsEnabled','--value','True','-t','15000') | Out-Null}
 function Title([string]$Text){UI @('wait-for','BrowserTitle','--value',$Text,'-t','15000') | Out-Null;Ready}
 function Nodes($items){foreach($item in $items){if($null -ne $item){$item;Nodes $item.children}}}
-function Inspect{$t=UI @('inspect','--json','-d','14') | ConvertFrom-Json;@(Nodes @($t.windows | ForEach-Object {$_.elements}))}
+function Inspect{
+    for($attempt=0;$attempt -lt 3;$attempt++){
+        try{$t=UI @('inspect','--json','-d','14') | ConvertFrom-Json;return @(Nodes @($t.windows | ForEach-Object {$_.elements}))}
+        catch{if($attempt -eq 2 -or "$_" -notmatch 'stale_element'){throw};Start-Sleep -Milliseconds 200}
+    }
+}
 function Row([string]$Name){$r=@(Inspect | Where-Object {$_.type -eq 'ListItem' -and $_.name.StartsWith($Name+'。')});if($r.Count -ne 1){throw "Expected one row for $Name, got $($r.Count)"};$r[0]}
 function OpenRow([string]$Name){$r=Row $Name;UI @('scroll-into-view',$r.selector) | Out-Null;UI @('click',$r.selector) | Out-Null;Ready}
 function Capture([string]$Name){Start-Sleep -Seconds 1;$path=Join-Path $artifacts "$Name.png";UI @('screenshot','--capture-screen','--output',$path,'--json') | Out-Null;if(!(Test-Path -LiteralPath $path) -or !(Get-Item -LiteralPath $path).Length){throw 'Screenshot missing.'};$screenshots.Add($path)}
@@ -53,7 +58,9 @@ function GoLibrary{
     if($items.automationId -contains 'DlnaAddress' -or $items.automationId -contains 'PlaybackFailureText'){UI @('invoke','CloseButton') | Out-Null;Gone 'CloseButton'}
     if($items.automationId -contains 'MediaInfoText'){Keys 'i';Gone 'MediaInfoText'}
     foreach($n in 1..2){$items=Inspect;if($items.automationId -contains 'BrowserCancel'){UI @('invoke','BrowserCancel') | Out-Null}}
-    $items=Inspect;if($items.automationId -contains 'PlayerHome'){UI @('invoke','PlayerHome') | Out-Null}
+    $items=Inspect
+    if($items.automationId -contains 'BrowserCancel'){UI @('invoke','BrowserCancel') | Out-Null;Gone 'BrowserList';$items=Inspect}
+    if($items | Where-Object {$_.automationId -eq 'PlayerHome' -and $_.isEnabled}){UI @('invoke','PlayerHome') | Out-Null}
     Wait 'ChooseFolder';UI @('invoke','ChooseFolder') | Out-Null;Title '保存済みフォルダー'
 }
 try{
@@ -109,7 +116,13 @@ public static class Stage5Native {
         $before=Info 'before-network-cut';if($before.seconds -lt 29){throw 'Could not seek the stream.'};CloseInfo
         $serverB.CutNetwork();$script:firstFailure=FailurePosition 'first-network-failure'
         if($firstFailure.file -ne 'Remote A.wav' -or $firstFailure.seconds -lt 29){throw 'Confirmed position was lost.'};Wait 'ErrorNextFile'
-        UI @('wait-for','PrimaryButton','-p','HasKeyboardFocus','--value','True','-t','5000') | Out-Null;Capture '04-playback-failure'
+        try{UI @('wait-for','PrimaryButton','-p','HasKeyboardFocus','--value','True','-t','5000') | Out-Null}
+        catch{
+            if(!$ContinueAfterFocusFailure){throw}
+            $results.Add(@{name='S35: retry dialog initial focus';status='FAIL';detail="$_"})
+            Write-Host "FAIL Retry dialog initial focus (continuing independent retry checks): $_"
+        }
+        Capture '04-playback-failure'
         UI @('invoke','CloseButton') | Out-Null;Gone 'PlaybackFailureText';State '再試行';Start-Sleep -Seconds 1
         $v=Info 'failed-position';if($v.file -ne $firstFailure.file -or [math]::Abs($v.seconds-$firstFailure.seconds) -gt 1){throw 'Close changed the failed media.'};CloseInfo
     }

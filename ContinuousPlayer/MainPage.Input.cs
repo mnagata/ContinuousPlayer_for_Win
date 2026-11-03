@@ -89,6 +89,7 @@ public sealed partial class MainPage
 
     private async Task ExecutePlaybackCommandAsync(PlaybackCommand command)
     {
+        TracePlaybackSession("command", command);
         if (!PlaybackInputAllowed) return;
         switch (command)
         {

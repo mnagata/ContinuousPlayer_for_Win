@@ -10,6 +10,7 @@ function Register-TestFixture([string]$Path){
     UI @('wait-for','BrowserRefresh','-p','IsEnabled','--value','True','-t','8000') | Out-Null
     $script:registeredFixtureName=Split-Path -Leaf $absolute;$script:testFixtureWasRegistered=$true
     UI @('wait-for',$script:registeredFixtureName,'-t','5000') | Out-Null
+    UI @('scroll-into-view',$script:registeredFixtureName) | Out-Null
     UI @('click',$script:registeredFixtureName) | Out-Null
     UI @('wait-for','BrowserRefresh','-p','IsEnabled','--value','True','-t','8000') | Out-Null
 }

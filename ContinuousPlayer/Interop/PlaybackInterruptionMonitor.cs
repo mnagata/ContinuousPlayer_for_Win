@@ -25,6 +25,7 @@ internal sealed class PlaybackInterruptionMonitor : IDisposable
     private bool subclassed;
     private bool sessionRegistered;
     private bool trackingAudio;
+    private bool usesDefaultOutput = true;
     private string? explicitAudioId;
     private string? outputId;
     private int audioGeneration;
@@ -66,6 +67,7 @@ internal sealed class PlaybackInterruptionMonitor : IDisposable
             {
                 watcher.Added += AudioAdded;
                 watcher.Removed += AudioRemoved;
+                watcher.Updated += AudioUpdated;
                 MediaDevice.DefaultAudioRenderDeviceChanged += DefaultOutputChanged;
                 watcher.Start();
                 return (Watcher: watcher, Selector: selector, Default: defaultId);
@@ -77,16 +79,28 @@ internal sealed class PlaybackInterruptionMonitor : IDisposable
         audioSelector = initialized.Selector;
         defaultOutputId = initialized.Default;
         audioReady = true;
-        TrackAudioOutput(explicitAudioId, trackingAudio);
+        RefreshTrackedOutput();
     }
 
-    public void TrackAudioOutput(string? deviceId, bool active)
+    public void TrackAudioOutput(PlaybackOutputInfo? output)
+    {
+        var nextExplicit = output?.UsesDefaultDevice == false ? output.DeviceId : null;
+        if (trackingAudio == (output != null) && explicitAudioId == nextExplicit &&
+            usesDefaultOutput == (output?.UsesDefaultDevice == true) &&
+            (output == null || output.DeviceId == null || SameDevice(outputId, output.DeviceId))) return;
+        trackingAudio = output != null;
+        explicitAudioId = nextExplicit;
+        usesDefaultOutput = output?.UsesDefaultDevice == true;
+        outputId = output?.DeviceId;
+        RefreshTrackedOutput();
+    }
+
+    private void RefreshTrackedOutput()
     {
         audioGeneration++;
-        trackingAudio = active;
-        explicitAudioId = deviceId;
-        outputId = active ? deviceId ?? defaultOutputId : null;
-        if (audioReady) Report(PlaybackInterruption.AudioOutputUnavailable, active && string.IsNullOrEmpty(outputId));
+        outputId = trackingAudio ? explicitAudioId ?? outputId ?? (usesDefaultOutput ? defaultOutputId : null) : null;
+        if (!trackingAudio) Report(PlaybackInterruption.AudioOutputUnavailable, false);
+        else if (audioReady) _ = RefreshAudioAsync();
     }
 
     private void WindowChanged(AppWindow sender, AppWindowChangedEventArgs args) => EvaluateWindow();
@@ -145,6 +159,9 @@ internal sealed class PlaybackInterruptionMonitor : IDisposable
     private void AudioAdded(DeviceWatcher sender, DeviceInformation device)
         => dispatcher.TryEnqueue(() => { if (!disposed) _ = RefreshAudioAsync(); });
 
+    private void AudioUpdated(DeviceWatcher sender, DeviceInformationUpdate device)
+        => dispatcher.TryEnqueue(() => { if (!disposed) _ = RefreshAudioAsync(); });
+
     private void DefaultOutputChanged(object? sender, DefaultAudioRenderDeviceChangedEventArgs args)
         => dispatcher.TryEnqueue(() =>
         {
@@ -168,9 +185,11 @@ internal sealed class PlaybackInterruptionMonitor : IDisposable
             if (disposed || !trackingAudio || generation != audioGeneration) return;
             var devices = refreshed.Devices;
             defaultOutputId = refreshed.Default;
+            if (usesDefaultOutput && !string.IsNullOrEmpty(previous) && !SameDevice(previous, defaultOutputId))
+                Report(PlaybackInterruption.AudioOutputUnavailable, true);
             if (!string.IsNullOrEmpty(previous) && !devices.Any(x => SameDevice(x.Id, previous) && x.IsEnabled))
                 Report(PlaybackInterruption.AudioOutputUnavailable, true);
-            outputId = explicitAudioId ?? defaultOutputId;
+            outputId = explicitAudioId ?? (usesDefaultOutput ? defaultOutputId : null);
             Report(PlaybackInterruption.AudioOutputUnavailable,
                 string.IsNullOrEmpty(outputId) || !devices.Any(x => SameDevice(x.Id, outputId) && x.IsEnabled));
         }
@@ -178,13 +197,14 @@ internal sealed class PlaybackInterruptionMonitor : IDisposable
     }
 
     private static bool SameDevice(string? first, string? second) =>
-        string.Equals(first, second, StringComparison.OrdinalIgnoreCase);
+        ExclusiveAudioPolicy.SameEndpoint(first, second);
 
     private void ReleaseAudioWatcher(DeviceWatcher watcher)
     {
         MediaDevice.DefaultAudioRenderDeviceChanged -= DefaultOutputChanged;
         watcher.Added -= AudioAdded;
         watcher.Removed -= AudioRemoved;
+        watcher.Updated -= AudioUpdated;
         if (watcher.Status is DeviceWatcherStatus.Started or DeviceWatcherStatus.EnumerationCompleted)
             watcher.Stop();
     }

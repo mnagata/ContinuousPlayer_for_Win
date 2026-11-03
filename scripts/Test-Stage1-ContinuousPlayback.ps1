@@ -65,10 +65,19 @@ try{
     UI @('wait-for','MediaInfoText','--gone','-t','3000') | Out-Null
     UI @('focus','TouchSurface') | Out-Null
     UI @('send-keys','right right','--via','send-input') | Out-Null
-    Start-Sleep -Milliseconds 500
+    UI @('wait-for','PART_TitleText','--value','Sample ED2','-t','5000') | Out-Null
+    UI @('wait-for','SeekForward','-p','IsEnabled','--value','True','-t','5000') | Out-Null
     UI @('send-keys','down down down down','--via','send-input') | Out-Null
+    UI @('send-keys','i','--via','send-input') | Out-Null;Wait 'MediaInfoText'
+    $finalBeforeEnd=UI @('get-value','MediaInfoText','--json') | ConvertFrom-Json
+    $finalBeforeEnd | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $artifacts 'final-before-end.json') -Encoding utf8
+    if($finalBeforeEnd.text -notmatch '再生位置: 00:00:4[0-3]'){throw "Final seek did not reach the natural-end position: $($finalBeforeEnd.text)"}
+    UI @('send-keys','i','--via','send-input') | Out-Null
+    UI @('wait-for','MediaInfoText','--gone','-t','3000') | Out-Null
     Start-Sleep -Seconds 7
     Wait 'Resume'
+    # PlaybackStatus belongs to the fullscreen overlay; windowed playback uses the title bar.
+    UI @('send-keys','f11','--via','send-input') | Out-Null
     UI @('wait-for','PlaybackStatus','--value','最後まで再生しました','-t','5000') | Out-Null
     UI @('invoke','Resume') | Out-Null
     UI @('wait-for','Resume','-p','Name','--value','一時停止','-t','3000') | Out-Null
@@ -83,10 +92,19 @@ try{
     if($HoldFinalInfoSeconds){Write-Host "HOLD final information for capture comparison: PID=$appPid; ReportDirectory=$artifacts";Start-Sleep -Seconds $HoldFinalInfoSeconds}
     UI @('send-keys','i','--via','send-input') | Out-Null
     UI @('wait-for','MediaInfoText','--gone','-t','3000') | Out-Null
+    UI @('send-keys','f11','--via','send-input') | Out-Null
     UI @('send-keys','h','--via','send-input') | Out-Null;Wait 'ChooseFolder'
     'PASS Natural media ending advances and plays the next file.'
     'PASS Explicit replay of the final file starts at zero.'
-}catch{$errorText="$_";Write-Host "FAIL $errorText"}
+}catch{
+    $errorText="$_";Write-Host "FAIL $errorText"
+    try{
+        UI @('send-keys','i','--via','send-input') | Out-Null;Wait 'MediaInfoText'
+        UI @('get-value','MediaInfoText','--json') | Set-Content -LiteralPath (Join-Path $artifacts 'failure-info.json') -Encoding utf8
+        $failureScreenshot=Join-Path $artifacts 'failure.png'
+        UI @('screenshot','--capture-screen','--output',$failureScreenshot,'--json') -Window $mainHwnd | Out-Null
+    }catch{}
+}
 finally{
     try{if($appPid -gt 0 -and (Get-Process -Id $appPid -ErrorAction SilentlyContinue)){Remove-TestFixtureRegistration}}catch{if(!$errorText){$errorText="Fixture cleanup: $_"}else{$errorText+="; Fixture cleanup: $_"}}
     try{if($appPid -gt 0 -and (Get-Process -Id $appPid -ErrorAction SilentlyContinue)){

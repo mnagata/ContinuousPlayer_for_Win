@@ -40,7 +40,6 @@
                             </ResourceDictionary>
                         </Button.Resources>
                     </Button>
-                    <TextBlock Text="← → 前 / 次　↑ ↓ 10秒シーク&#x0a;Space / Enter 再生・一時停止　F11 全画面" TextAlignment="Center" Foreground="{ThemeResource MutedTextBrush}" FontSize="14" Margin="0,20,0,0" TextWrapping="Wrap"/>
                 </StackPanel>
             </Grid>
         </ScrollViewer>
@@ -48,6 +47,7 @@
                 <Button x:Name="WindowedHomeButton" Click="Home_Click" Style="{StaticResource TitleBarButtonStyle}" AutomationProperties.AutomationId="PlayerHome" AutomationProperties.Name="ホームに戻る" ToolTipService.ToolTip="ホームに戻る (H)"><Viewbox Width="16" Height="16"><PathIcon Data="{x:Bind local:MainPage.TitleBarIconGeometry('HomeIcon'), Mode=OneTime}" Width="24" Height="24"/></Viewbox></Button>
                 <Button x:Name="WindowedFilesButton" Click="PlaybackFolder_Click" Style="{StaticResource TitleBarButtonStyle}" AutomationProperties.AutomationId="PlaybackFolder" AutomationProperties.Name="ファイル一覧" ToolTipService.ToolTip="ファイル一覧 (O)"><Viewbox Width="16" Height="16"><PathIcon Data="{x:Bind local:MainPage.TitleBarIconGeometry('FolderIcon'), Mode=OneTime}" Width="24" Height="24"/></Viewbox></Button>
                 <Button x:Name="WindowedInfoButton" Click="Info_Click" Style="{StaticResource TitleBarButtonStyle}" AutomationProperties.AutomationId="PlaybackInfo" AutomationProperties.Name="メディア情報" ToolTipService.ToolTip="メディア情報 (I)"><Viewbox Width="16" Height="16"><PathIcon Data="{x:Bind local:MainPage.TitleBarIconGeometry('InfoIcon'), Mode=OneTime}" Width="24" Height="24"/></Viewbox></Button>
+                <Button x:Name="WindowedAudioSettingsButton" Click="AudioSettings_Click" IsEnabled="False" Style="{StaticResource TitleBarButtonStyle}" AutomationProperties.AutomationId="AudioOutputSettings" AutomationProperties.Name="音声出力設定" ToolTipService.ToolTip="音声出力設定"><FontIcon Glyph="&#xE713;" FontSize="16"/></Button>
         </StackPanel>
         <Grid x:Name="Playback" Visibility="Collapsed" Background="{ThemeResource CanvasBrush}">
             <MediaPlayerElement x:Name="Player" AreTransportControlsEnabled="False" AutoPlay="False" Stretch="Uniform" IsTabStop="False" IsHitTestVisible="False" AutomationProperties.AutomationId="VideoPlayer" AutomationProperties.Name="メディア映像"/>
@@ -68,6 +68,7 @@
                         <Button x:Name="PlayerHomeButton" Click="Home_Click" Style="{StaticResource PlayerButtonStyle}" AutomationProperties.AutomationId="PlayerHome" AutomationProperties.Name="ホームに戻る" ToolTipService.ToolTip="ホームに戻る (H)"><Viewbox Width="24" Height="24"><PathIcon Data="{x:Bind local:MainPage.IconGeometry('HomeIcon'), Mode=OneTime}" Width="24" Height="24"/></Viewbox></Button>
                         <Button x:Name="FilesButton" Click="PlaybackFolder_Click" Style="{StaticResource PlayerButtonStyle}" AutomationProperties.AutomationId="PlaybackFolder" AutomationProperties.Name="ファイル一覧" ToolTipService.ToolTip="ファイル一覧 (O)"><Viewbox Width="24" Height="24"><PathIcon Data="{x:Bind local:MainPage.IconGeometry('FolderIcon'), Mode=OneTime}" Width="24" Height="24"/></Viewbox></Button>
                         <Button x:Name="InfoButton" Click="Info_Click" Style="{StaticResource PlayerButtonStyle}" AutomationProperties.AutomationId="PlaybackInfo" AutomationProperties.Name="メディア情報" ToolTipService.ToolTip="メディア情報 (I)"><Viewbox Width="24" Height="24"><PathIcon Data="{x:Bind local:MainPage.IconGeometry('InfoIcon'), Mode=OneTime}" Width="24" Height="24"/></Viewbox></Button>
+                        <Button x:Name="PlayerAudioSettingsButton" Click="AudioSettings_Click" Style="{StaticResource PlayerButtonStyle}" AutomationProperties.AutomationId="FullscreenAudioSettings" AutomationProperties.Name="音声出力設定" ToolTipService.ToolTip="音声出力設定"><FontIcon Glyph="&#xE713;"/></Button>
                     </StackPanel>
                     <Button x:Name="FullscreenButton" Grid.Column="3" Visibility="Collapsed" Click="Fullscreen_Click" Style="{StaticResource PlayerButtonStyle}" AutomationProperties.AutomationId="PlaybackFullscreen" AutomationProperties.Name="全画面を解除" ToolTipService.ToolTip="全画面を解除 (F11)"><FontIcon Glyph="&#xE73F;"/></Button>
                 </Grid>

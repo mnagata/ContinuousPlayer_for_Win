@@ -3,7 +3,6 @@ using System.Runtime.InteropServices;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Input;
-using Windows.Media.Playback;
 using ContinuousPlayer.Core;
 
 namespace ContinuousPlayer;
@@ -30,7 +29,7 @@ public sealed partial class MainPage
     }
 
     private bool CanHidePlaybackChrome => !disposed && isPlayback &&
-        PlaybackPresentation.CanAutoHide(mediaPlayer?.PlaybackSession.NaturalVideoWidth > 0, userPaused,
+        PlaybackPresentation.CanAutoHide(playbackEngine?.HasVideo == true, userPaused,
             dialogOpen || BrowserOverlay.Visibility == Visibility.Visible, windowActive && ControlsHaveKeyboardFocus,
             AccessibilityControlsActive, preparing: playbackState.Phase == PlaybackPhase.Preparing);
 
@@ -100,31 +99,34 @@ public sealed partial class MainPage
         else RefreshPlaybackChrome();
     }
 
-    private void Player_PlaybackStateChanged(MediaPlaybackSession sender, object args) => DispatcherQueue.TryEnqueue(() =>
+    private void Player_PlaybackStateChanged(object? sender, EventArgs args) => DispatcherQueue.TryEnqueue(() =>
     {
-        if (disposed || mediaPlayer?.PlaybackSession != sender) return;
-        if (sender.PlaybackState == MediaPlaybackState.Playing)
+        if (disposed || sender is not IPlaybackEngine engine || playbackEngine != engine) return;
+        TracePlaybackSession("engine-state");
+        UpdateAppliedAudioStatus();
+        if (engine.State == PlaybackEngineState.Playing)
         {
             playerHasPlayed = true;
             expectedEnginePause = false;
         }
-        else if (sender.PlaybackState == MediaPlaybackState.Paused && expectedEnginePause)
+        else if (engine.State == PlaybackEngineState.Paused && expectedEnginePause)
             expectedEnginePause = false;
-        else if (sender.PlaybackState == MediaPlaybackState.Paused && playerHasPlayed && playbackState.CanPlay)
+        else if (engine.State == PlaybackEngineState.Paused && playerHasPlayed && playbackState.CanPlay)
         {
             var stamp = playbackState.Stamp;
             // Let a queued MediaEnded run first. Otherwise a natural end can be
             // mistaken for an interruption and suppress continuous playback.
             DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
             {
-                if (disposed || !playbackState.IsCurrent(stamp) || mediaPlayer?.PlaybackSession != sender ||
-                    sender.PlaybackState != MediaPlaybackState.Paused || expectedEnginePause) return;
-                playbackState.ObserveUnexpectedPause(sender.Position, sender.NaturalDuration);
+                if (disposed || !playbackState.IsCurrent(stamp) || playbackEngine != engine ||
+                    engine.State != PlaybackEngineState.Paused || expectedEnginePause) return;
+                playbackState.ObserveUnexpectedPause(engine.Position, engine.Duration);
+                TracePlaybackSession("unexpected-pause");
                 if (!playbackState.CanPlay) ApplyPlaybackState();
             });
         }
         // Buffering is still playback, and must not reveal a pause menu by itself.
-        if (sender.PlaybackState != MediaPlaybackState.Buffering) UpdateCursorAutoHide();
+        if (engine.State != PlaybackEngineState.Buffering) UpdateCursorAutoHide();
     });
 
     private void DisposeCursorAutoHide()

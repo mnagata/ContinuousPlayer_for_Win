@@ -47,6 +47,7 @@ public sealed partial class MainPage : Page
         {
             interruptionMonitor = new(App.Window, PlaybackInterruptionChanged);
             inputMonitor = new(App.WindowHandle);
+            transportControls = new(App.WindowHandle, key => inputMonitor?.TryAcceptMediaKey(key) != false, Transport_Command);
             await interruptionMonitor.InitializeAudioAsync();
             if (disposed) return;
         }
@@ -56,10 +57,14 @@ public sealed partial class MainPage : Page
             await ShowMessageAsync("中断監視", "ロック・スリープ・音声出力の監視を開始できませんでした。\n" + ex.Message);
         }
         await library.LoadAsync();
+        audioSettings = App.AudioOptions.ApplyTo(await audioSettingsStore.LoadAsync());
         if (disposed) return;
+        audioSettingsReady = true;
+        UpdatePlaybackButtons();
         ChooseButton.IsEnabled = true;
         ChooseButton.Focus(FocusState.Programmatic);
         if (library.LoadWarning != null) await ShowMessageAsync("保存データ", library.LoadWarning);
+        if (audioSettingsStore.LoadWarning != null) await ShowMessageAsync("音声出力設定", audioSettingsStore.LoadWarning);
     }
 
     private void Window_Activated(object sender, WindowActivatedEventArgs args)
@@ -192,11 +197,14 @@ public sealed partial class MainPage : Page
         }
         App.Window.Activated -= Window_Activated;
         activeInfoDialog?.Hide();
+        activeAudioSettingsDialog?.Hide();
         activeConnectionDialog?.Hide();
         activeErrorDialog?.Hide();
         CloseBrowser(BrowserCloseReason.WindowClosed);
         browserCancellation?.Cancel();
         StopPlayback();
+        transportControls?.Dispose();
+        transportControls = null;
         interruptionMonitor?.Dispose();
         interruptionMonitor = null;
         inputMonitor?.Dispose();

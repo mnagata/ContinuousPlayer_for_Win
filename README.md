@@ -90,7 +90,29 @@ dotnet run --project .\tests\ContinuousPlayer.Core.Tests
 
 ## Windows版の範囲
 
-再生にはWinUIの`MediaPlayerElement`とWindows `MediaPlayer`を使用します。AndroidのSAFはWindowsのフォルダーピッカーへ置き換えています。USBはOSにマウントされたドライブが対象です。AndroidのUSB Preferred Mixer Attributesに相当するビットパーフェクト設定、WASAPI排他出力、Android TV固有APIは実装していません。音声はWindows標準ミキサー経由です。再生位置・プレイリストのプロセス終了後の復元、バックグラウンド再生サービスも対象外です。
+Hi-Res対応の第1段階として、アプリとは独立した[音声検証CLI](tools/ContinuousPlayer.AudioProbe/README.md)を追加しました。BTR17（USB）のWASAPI排他レート切り替えとデコーダーの検証結果は[第1段階の検証記録](docs/audio-sample-rate-stage1-validation.md)を参照してください。
+
+第2段階では、標準のMediaPlayerを共通エンジン契約の背後へ移し、位置復元・中断・メディアキー等の制御を共通化しました。UIの残件2項目は[第2段階の検証記録](docs/audio-sample-rate-stage2-validation.md)に残しています。
+
+第3段階では、ローカルWAV/FLAC/M4AのWASAPI排他再生を実装しました。再生・一時停止・シーク・連続再生に対応し、各曲のPCMレートとチャンネル数を保持します。BTR17で24-bit音源は精度を保って32-bit整数へ拡張します。[第3段階の検証記録](docs/audio-sample-rate-stage3-validation.md)に確認範囲を記録しています。
+
+第4段階では、歯車ボタンの「音声出力設定」から「標準」「曲に合わせる（排他）」と出力機器を選び、保存できるようにしました。初期値は標準で、通常起動では保存設定を使用します。音声設定はフォルダー情報とは別の`audio-settings.json`に保存します。再生中の変更は同じ位置で一時停止し、手動再開を待ちます。特定DACが不在なら別機器へ自動出力せず、エラーから明示的に「この曲を標準再生」を選べます。
+
+WAV/FLAC/AAC M4Aに加え、MP3とADTS AACの実再生・停止中シークを確認しました。この環境ではOGG/Vorbis・OpusのWindowsデコーダーを利用できず、未対応エラーになります。追加デコーダーは同梱していません。第4段階で残った設定・中断・エラーUIは、第6段階の追試で11項目すべて通過しました。[第4段階の検証記録](docs/audio-sample-rate-stage4-validation.md)を参照してください。
+
+第5段階ではNAS/DLNAのHTTP音声にも排他再生を適用しました。再生・再試行時に配信URLを取得し直してから、そのデータのPCM形式を調べます。HTTP Rangeと全体サイズを取得できる配信先が対象で、各HTTPストリームに1 MiB単位・最大8 MiBのキャッシュを使います。通信断は自然終了と区別し、再試行で確認済み位置を復元します。サーバー変換が申告された音源は情報に表示し、元ファイルのタグではなく受信データのPCMレートで出力します。動画・UNCは標準再生です。Core・実エンジン・実NASに続き、第6段階でDLNAのUI 7項目も通過しました。[第5段階の検証記録](docs/audio-sample-rate-stage5-validation.md)に当時の結果と追試を記録しています。
+
+第6段階でx64/ARM64のDebug/Releaseビルド、約22分のローカル/HTTP再生・排他解放・負荷測定、UI 18項目が通過しました。BTR17本体の実PCMレート表示も確認済みです。試験公開の対象はWindows x64とBTR17で確認した音声再生です。ARM64はクロスビルドのみで、他DACや実スリープ、聴取による先頭/末尾・クリック音の確認は別途必要です。[第6段階の検証記録](docs/audio-sample-rate-stage6-validation.md)に測定値と全体受入の残件を整理しています。
+
+```powershell
+# 機器を省略するとWindows既定出力を使用。指定する場合はAudioProbe listのIdを渡す
+winapp run .\ContinuousPlayer --arch x64 --args '--exclusive-audio'
+# 引数はセッションだけの上書き。保存設定を一時的に無視するには --standard-audio
+# 任意のJSONL診断ログも指定可能
+# --args '--exclusive-audio --audio-device "{実際のエンドポイントID}" --audio-log "C:\Logs\audio.jsonl"'
+```
+
+標準再生にはWinUIの`MediaPlayerElement`とWindows `MediaPlayer`、排他音声にはMedia FoundationのPCMデコーダーとWASAPIを使用します。AndroidのSAFはWindowsのフォルダーピッカーへ置き換えています。USBストレージはOSにマウントされたドライブが対象です。ビットパーフェクトの保証、Android TV固有API、再生位置・プレイリストのプロセス終了後の復元、バックグラウンド再生サービスは対象外です。
 
 DLNAは公開されたContentDirectoryを読み取ります。NASのログイン、SMB、DTCP-IP、キャストには対応しません。ホスト名・IP（ポート指定可）またはHTTP/HTTPSのデバイス記述URLで接続できます。パス省略時は `/desc/device.xml`、その場合ポートも省略すると50001を使います。保存にはサーバーID・フォルダーID・記述URLを使い、メディアURLは再取得します。接続できない登録は「接続先を再指定」から同じNASの新しいアドレスへ変更できます。
 

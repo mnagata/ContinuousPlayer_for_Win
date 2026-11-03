@@ -12,7 +12,7 @@ public sealed partial class MainPage
     private bool playbackWasPaused = true;
 
     private Button[] PlaybackButtons => [PlayerHomeButton, FilesButton, InfoButton, FullscreenButton,
-        WindowedHomeButton, WindowedFilesButton, WindowedInfoButton,
+        WindowedHomeButton, WindowedFilesButton, WindowedInfoButton, PlayerAudioSettingsButton,
         PreviousButton, RewindButton, ResumeButton, ForwardButton, NextButton];
 
     private void InitializePlaybackChrome()
@@ -84,6 +84,8 @@ public sealed partial class MainPage
     {
         var allowed = PlaybackInputAllowed;
         foreach (var button in PlaybackButtons) button.IsEnabled = allowed;
+        WindowedAudioSettingsButton.IsEnabled = audioSettingsReady && !dialogOpen &&
+            BrowserOverlay.Visibility != Visibility.Visible && (!isPlayback || allowed);
         PreviousButton.IsEnabled = allowed && queue.Index > 0;
         NextButton.IsEnabled = allowed && queue.Index + 1 < queue.Items.Count;
         RewindButton.IsEnabled = ForwardButton.IsEnabled = allowed && CanSeekCurrent;
