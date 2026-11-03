@@ -3,9 +3,6 @@
     <Platform Name="x64" />
     <Platform Name="ARM64" />
   </Configurations>
-  <Folder Name="/tools/">
-    <Project Path="tools/ContinuousPlayer.AudioProbe/ContinuousPlayer.AudioProbe.csproj" />
-  </Folder>
   <Project Path="ContinuousPlayer/ContinuousPlayer.csproj">
     <Platform Solution="*|x64" Project="x64" />
     <Platform Solution="*|ARM64" Project="ARM64" />
