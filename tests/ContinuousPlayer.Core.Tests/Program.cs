@@ -159,6 +159,16 @@ try
         var page = DlnaProtocol.Page(Page(didl, 4, 4), new Uri("http://localhost/browse"));
         Equal(4, page.Returned); Equal(2, page.Entries.Count); Equal("http://localhost/original", page.Entries[1].Media!.Location); Equal(-1L, page.Entries[1].Media!.Size);
     }));
+    await Test("DIDL album artwork resolves HTTP references and ignores invalid optional artwork", () => Check(() =>
+    {
+        foreach (var address in new[] { "/covers/album.png", "file:///private/cover.jpg", "http://user:pass@nas/cover.jpg", "" })
+        {
+            var didl = $"<DIDL-Lite><item id='song'><title>Music.flac</title><albumArtURI>{address}</albumArtURI><res protocolInfo='http-get:*:audio/flac:*'>/song</res></item></DIDL-Lite>";
+            var media = DlnaProtocol.Page(Page(didl, 1, 1), new Uri("http://nas:8080/browse")).Entries.Single().Media!;
+            Equal("http://nas:8080/song", media.Location);
+            Equal(address.StartsWith('/') ? "http://nas:8080/covers/album.png" : null, media.AlbumArtUri);
+        }
+    }));
     await Test("DTD/external entities are prohibited", () => Check(() =>
     {
         try { DlnaProtocol.Server("<!DOCTYPE root [<!ENTITY x SYSTEM 'file:///C:/secret'>]><root>&x;</root>", new Uri("http://localhost/")); throw new Exception("Accepted DTD"); }

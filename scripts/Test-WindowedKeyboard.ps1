@@ -6,7 +6,8 @@ param(
     [switch]$OriginalMedia,
     [ValidateRange(50,10000)][int]$StartupDelayMilliseconds = 1600,
     [string]$RegisteredRoot,
-    [ValidateRange(0,200)][int]$CaptionClickMilliseconds = 80
+    [ValidateRange(0,200)][int]$CaptionClickMilliseconds = 80,
+    [switch]$LongTitle
 )
 $ErrorActionPreference='Stop'
 $PSNativeCommandUseErrorActionPreference=$false
@@ -71,8 +72,8 @@ function CheckTitleBar {
     $player=$items | Where-Object {$_.automationId -eq 'VideoPlayer'} | Select-Object -First 1
     $caption=$items | Where-Object {$_.automationId -eq 'Minimize'} | Select-Object -First 1
     $scale=[WindowedKeyboardNative]::Scale($hwnd)
-    $commands=@($items | Where-Object {$_.automationId -in @('PlayerHome','PlaybackFolder','PlaybackInfo','WindowFullscreen')})
-    if(!$bar -or !$player -or !$caption -or $commands.Count -ne 4){throw 'Title-bar commands unavailable.'}
+    $commands=@($items | Where-Object {$_.automationId -in @('PlayerHome','PlaybackFolder','PlaybackInfo','AudioOutputSettings','WindowFullscreen')})
+    if(!$bar -or !$player -or !$caption -or $commands.Count -ne 5){throw 'Title-bar commands unavailable.'}
     if([math]::Abs($bar.height-32*$scale) -gt 1 -or [math]::Abs($bar.height-$caption.height) -gt 1 -or
         [math]::Abs($bar.y-$caption.y) -gt 1){throw 'Title bar does not match the standard caption height.'}
     foreach($button in $commands){
@@ -84,6 +85,10 @@ function CheckTitleBar {
     }
     $title=$items | Where-Object {$_.automationId -eq 'PART_TitleText'} | Select-Object -First 1
     if(!$title -or $title.y -ge $player.y){throw 'Playback title remained over the video.'}
+    $firstCommand=$commands | Sort-Object x | Select-Object -First 1
+    if($title.x+$title.width -gt $firstCommand.x-1){throw 'Playback title overlaps title-bar commands.'}
+    $subtitle=$items | Where-Object {$_.automationId -eq 'PART_SubtitleText' -and !$_.isOffscreen} | Select-Object -First 1
+    if($subtitle -and $subtitle.x+$subtitle.width -gt $firstCommand.x-1){throw 'Playback status overlaps title-bar commands.'}
     if($title.height -lt 20*$scale -or $title.y -lt $bar.y -or $title.y+$title.height -gt $bar.y+$bar.height+1){throw 'Larger title text is missing or clipped vertically.'}
 }
 function CheckInitialVideoViewport {
@@ -126,6 +131,7 @@ $recording=$null
 $originalLink=$null
 try{
     if(!(Test-Path -LiteralPath $VideoPath -PathType Leaf)){throw 'A test video of at least 60 seconds is required.'}
+    if($LongTitle -and !$LayoutOnly){throw 'LongTitle requires LayoutOnly.'}
     if($RegisteredRoot){
         if(!$MaximizeOnly){throw 'RegisteredRoot requires MaximizeOnly.'}
         $startupFileName=Split-Path -Leaf $VideoPath
@@ -135,7 +141,7 @@ try{
         $originalLink=Join-Path $fixture 'Original'
         New-Item -ItemType Junction -Path $originalLink -Target (Split-Path -Parent $VideoPath) | Out-Null
     }else{
-        $startupFileName=if($MaximizeOnly){'Sample OP'+[IO.Path]::GetExtension($VideoPath)}else{'Sample OP.mp4'}
+        $startupFileName=if($LongTitle){('長いタイトル表示確認_ABC123_'*5)+'OP.mp4'}elseif($MaximizeOnly){'Sample OP'+[IO.Path]::GetExtension($VideoPath)}else{'Sample OP.mp4'}
         Copy-Item -LiteralPath $VideoPath -Destination (Join-Path $fixture $startupFileName)
         Copy-Item -LiteralPath $VideoPath -Destination (Join-Path $fixture 'Sample ED.mp4')
     }
@@ -153,7 +159,7 @@ try{
         if($relative -ne '.') {foreach($part in $relative.Split([IO.Path]::DirectorySeparatorChar)){$folderPath=Join-Path $folderPath $part;ClickBrowserPath $folderPath}}
         ClickBrowserPath $VideoPath
     }else{
-    UI @('click','フォルダーを追加') | Out-Null;UI @('click','PC / ローカルフォルダー') | Out-Null
+    Keys 'end';UI @('click','フォルダーを追加') | Out-Null;UI @('click','PC / ローカルフォルダー') | Out-Null
     $picker=[IntPtr]::Zero
     for($i=0;$i -lt 40 -and $picker -eq [IntPtr]::Zero;$i++){$picker=[WindowedKeyboardNative]::Picker($hwnd);if($picker -eq [IntPtr]::Zero){Start-Sleep -Milliseconds 100}}
     if($picker -eq [IntPtr]::Zero){throw 'No native picker.'}
@@ -310,8 +316,10 @@ try{
         UI @('drag',"$x,$y","$($x+60),$($y+40)") | Out-Null
         $after=[WindowedKeyboardNative]::CaptureBounds($hwnd)
         if([math]::Abs($after.left-$before.left) -lt 20){throw 'Playback title did not drag the window.'}
-        Keys 'left';Title 'Sample OP';Paused;Focused 'TouchSurface'
-        Keys 'right';Title 'Sample ED';Paused;Focused 'TouchSurface'
+        if(!$LongTitle){
+            Keys 'left';Title 'Sample OP';Paused;Focused 'TouchSurface'
+            Keys 'right';Title 'Sample ED';Paused;Focused 'TouchSurface'
+        }
         UI @('click','PlayerHome') | Out-Null;$null=Fresh 'ChooseFolder'
         $items=Inspect
         foreach($command in @('PlayerHome','PlaybackFolder','PlaybackInfo')){

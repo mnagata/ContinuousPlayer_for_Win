@@ -66,12 +66,30 @@ public sealed partial class MainWindow : Window
 
     private void UpdateTitleBarPosition()
     {
-        if (AppTitleBar.Visibility != Visibility.Visible || PlaybackTitleBarActions.ActualWidth <= 0 ||
+        if (AppTitleBar.Visibility != Visibility.Visible ||
             AppTitleBar.XamlRoot is not { } root) return;
         AppTitleBar.UpdateLayout();
+        if (AppTitleBar.ActualWidth <= 0) return;
+        var captionLeft = AppTitleBar.ActualWidth - AppWindow.TitleBar.RightInset / root.RasterizationScale;
+        // Measure commands independently: an unconstrained title can otherwise push them offscreen.
+        PlaybackTitleBarActions.Measure(new Windows.Foundation.Size(double.PositiveInfinity, AppTitleBar.Height));
+        var commandsWidth = PlaybackTitleBarActions.DesiredSize.Width;
+        if (FindTitleText(AppTitleBar) is { } title)
+        {
+            var titleLeft = title.TransformToVisual(AppTitleBar).TransformPoint(new Windows.Foundation.Point()).X;
+            var textWidth = Math.Max(0, captionLeft - titleLeft - commandsWidth - title.Margin.Right - 8);
+            if (FindTitleText(AppTitleBar, "PART_SubtitleText") is { Visibility: Visibility.Visible } subtitle)
+            {
+                subtitle.MaxWidth = Math.Min(160, textWidth / 3);
+                AppTitleBar.UpdateLayout();
+                textWidth = Math.Max(0, textWidth - subtitle.ActualWidth - subtitle.Margin.Left - subtitle.Margin.Right);
+            }
+            title.MaxWidth = textWidth;
+            title.TextTrimming = TextTrimming.CharacterEllipsis;
+            AppTitleBar.UpdateLayout();
+        }
         var right = PlaybackTitleBarActions.TransformToVisual(AppTitleBar)
             .TransformPoint(new Windows.Foundation.Point(PlaybackTitleBarActions.ActualWidth, 0)).X;
-        var captionLeft = AppTitleBar.ActualWidth - AppWindow.TitleBar.RightInset / root.RasterizationScale;
         // Shift by two button widths when space permits, leaving a gap before the native captions.
         var offset = Math.Clamp(captionLeft - (right - titleBarActionsOffset) - 8, 0, 64);
         if (Math.Abs(offset - titleBarActionsOffset) > 0.5)
@@ -83,11 +101,11 @@ public sealed partial class MainWindow : Window
         AppTitleBar.RecomputeDragRegions();
     }
 
-    private static TextBlock? FindTitleText(DependencyObject element)
+    private static TextBlock? FindTitleText(DependencyObject element, string name = "PART_TitleText")
     {
-        if (element is TextBlock { Name: "PART_TitleText" } title) return title;
+        if (element is TextBlock title && title.Name == name) return title;
         for (var i = 0; i < VisualTreeHelper.GetChildrenCount(element); i++)
-            if (FindTitleText(VisualTreeHelper.GetChild(element, i)) is { } match) return match;
+            if (FindTitleText(VisualTreeHelper.GetChild(element, i), name) is { } match) return match;
         return null;
     }
 

@@ -55,7 +55,10 @@
                 <local:CursorSurface.Template><ControlTemplate TargetType="local:CursorSurface"><Grid Background="{TemplateBinding Background}"/></ControlTemplate></local:CursorSurface.Template>
             </local:CursorSurface>
             <StackPanel x:Name="AudioTitle" VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="640" Margin="32" IsHitTestVisible="False" Visibility="Collapsed" Spacing="20">
-                <Viewbox Width="64" Height="64"><PathIcon Data="{x:Bind local:MainPage.IconGeometry('AudioIcon'), Mode=OneTime}" Width="24" Height="24" Foreground="{ThemeResource AccentTextBrush}"/></Viewbox>
+                <Viewbox x:Name="AudioPlaceholder" Width="64" Height="64" AutomationProperties.AutomationId="AudioPlaceholder"><PathIcon Data="{x:Bind local:MainPage.IconGeometry('AudioIcon'), Mode=OneTime}" Width="24" Height="24" Foreground="{ThemeResource AccentTextBrush}"/></Viewbox>
+                <Viewbox x:Name="AudioArtworkHost" Width="320" Height="320" Stretch="Uniform" Visibility="Collapsed" AutomationProperties.AutomationId="AudioArtworkHost">
+                    <Image x:Name="AudioArtwork" Width="360" Height="360" Stretch="Uniform" AutomationProperties.AutomationId="AudioArtwork" AutomationProperties.Name="アルバムのジャケット"/>
+                </Viewbox>
                 <TextBlock Text="{x:Bind Vm.PlaybackTitle, Mode=OneWay}" AutomationProperties.AccessibilityView="Raw" Style="{StaticResource SubtitleTextBlockStyle}" TextWrapping="Wrap" MaxLines="3" TextTrimming="CharacterEllipsis" TextAlignment="Center" Foreground="{ThemeResource MainTextBrush}"/>
             </StackPanel>
             <Grid x:Name="PauseToolbar" Visibility="Collapsed" GotFocus="Chrome_FocusChanged" LostFocus="Chrome_FocusChanged" AutomationProperties.AutomationId="PlaybackChrome">

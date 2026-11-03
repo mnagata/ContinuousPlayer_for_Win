@@ -68,6 +68,11 @@ public static class DlnaProtocol
                 if (element.Name.LocalName == "container") entries.Add(new(id, title));
                 else if (element.Name.LocalName == "item")
                 {
+                    string? artwork = null;
+                    var albumArt = Child(element, "albumArtURI");
+                    if (albumArt.Length > 0)
+                        try { artwork = Resolve(origin, albumArt).AbsoluteUri; }
+                        catch (Exception ex) when (ex is UriFormatException or InvalidDataException) { }
                     foreach (var res in element.Elements().Where(x => x.Name.LocalName == "res")
                         .OrderBy(x => ((string?)x.Attribute("protocolInfo"))?.Contains("DLNA.ORG_CI=1") == true))
                     {
@@ -80,7 +85,7 @@ public static class DlnaProtocol
                             ((mime is "*" or "application/octet-stream") && (MediaCatalog.IsSupported(title) || MediaCatalog.IsSupported(url.AbsolutePath))))) continue;
                         var media = new MediaFile(id, title, url.ToString(), long.TryParse((string?)res.Attribute("size"), out var size) ? size : -1,
                             mime.StartsWith("audio/") || mime.StartsWith("video/") ? mime : null,
-                            protocol[3].Contains("DLNA.ORG_CI=1", StringComparison.OrdinalIgnoreCase));
+                            protocol[3].Contains("DLNA.ORG_CI=1", StringComparison.OrdinalIgnoreCase)) { AlbumArtUri = artwork };
                         entries.Add(new(id, title, media));
                         break;
                     }

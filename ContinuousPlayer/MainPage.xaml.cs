@@ -77,6 +77,8 @@ public sealed partial class MainPage : Page
     private void Page_SizeChanged(object sender, SizeChangedEventArgs e)
     {
         if (BrowserCard == null) return;
+        var artworkSize = Math.Clamp(Math.Min(e.NewSize.Width - 64, e.NewSize.Height - 232), 48, 360);
+        AudioArtworkHost.Width = AudioArtworkHost.Height = artworkSize;
         var compact = e.NewSize.Height < 560;
         BrowserOverlay.Padding = new Thickness(compact ? 12 : 24);
         BrowserCard.Padding = new Thickness(compact ? 12 : 20);

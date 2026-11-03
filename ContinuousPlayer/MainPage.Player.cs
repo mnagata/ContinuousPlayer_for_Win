@@ -118,6 +118,7 @@ public sealed partial class MainPage
         playbackState.BeginMedia();
         pendingFailure = null;
         lastFailure = null;
+        ClearAudioArtwork();
         ReleasePlayer();
         playerHasPlayed = false;
         expectedEnginePause = false;
@@ -231,6 +232,8 @@ public sealed partial class MainPage
         }
         else Vm.PlaybackStatus = "";
         ApplyPlaybackState();
+        if (!session.HasVideo && queue.Current is { } track)
+            _ = LoadAudioArtworkAsync(track, session, stamp);
     });
 
     private void Player_MediaEnded(object? sender, EventArgs args) => DispatcherQueue.TryEnqueue(async () =>
@@ -516,6 +519,7 @@ public sealed partial class MainPage
 
     private void StopPlayback()
     {
+        ClearAudioArtwork();
         gestures.Reset();
         mediaRequest++;
         mediaCancellation?.Cancel(); mediaCancellation?.Dispose(); mediaCancellation = null;
